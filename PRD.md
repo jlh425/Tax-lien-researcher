@@ -477,12 +477,138 @@ Re-ranking:       Cross-encoder re-rank for precision-critical lookups
 
 ## 8. Output & Reporting
 
-### 8.1 Per-Parcel Research Report (draft schema)
+### 8.1 Delivery Formats
+
+Every fully-researched parcel produces two output artifacts:
+
+| Format | Purpose | When |
+|--------|---------|------|
+| **Web report** (Archon2.0 UI) | Live working view — images inline, citations clickable, data refreshable | Always generated |
+| **PDF export** | Shareable report — images embedded, citations listed, printable | On-demand (toggle per parcel or batch) |
+
+The PDF mirrors the web report but excludes live interactive elements (map embeds become static images, links become footnoted URLs).
+
+---
+
+### 8.2 Property Imagery Pipeline
+
+Every parcel report includes visual evidence captured by the **Image Capture Agent** in this priority order:
+
+#### Priority 1 — GIS Parcel Map (always attempted first)
+- **Source:** County ArcGIS portal export endpoint or Regrid API
+- **What it shows:** Exact parcel boundaries, neighboring lots, zoning overlay (color-coded by zone), street names
+- **Method:** ArcGIS REST `exportImage` endpoint (most counties support this):
+  ```
+  GET https://{county}.gov/arcgis/rest/services/Parcels/MapServer/export
+      ?bbox={parcel_bbox}
+      &layers=show:0,1,2          (parcels + zoning layers)
+      &size=800,600
+      &f=image
+  ```
+- **Fallback:** Playwright screenshot of the county's online GIS viewer
+
+#### Priority 2 — Google Street View
+- **Source:** Google Street View Static API
+- **What it shows:** Ground-level photo of the structure (or nearest road point for vacant land)
+- **Method:**
+  ```
+  GET https://maps.googleapis.com/maps/api/streetview
+      ?size=800x500
+      &location={address}
+      &heading=auto
+      &fov=90
+      &key={GOOGLE_MAPS_API_KEY}
+  ```
+- **Fallback:** Bing Maps Street View (same concept, different API)
+- **Vacant land handling:** If Street View returns a "no imagery" response, skip gracefully and note in report
+
+#### Priority 3 — Satellite / Aerial
+- **Source:** Google Maps Static API (`maptype=satellite`)
+- **What it shows:** Overhead view — structure footprint, lot size, surrounding context
+- **Method:**
+  ```
+  GET https://maps.googleapis.com/maps/api/staticmap
+      ?center={lat},{lng}
+      &zoom=18
+      &size=800x500
+      &maptype=satellite
+      &key={GOOGLE_MAPS_API_KEY}
+  ```
+
+#### Priority 4 — Zillow / Listing Photos (when available)
+- **Source:** Zillow property page (crawl4ai or agent-browser)
+- **What it shows:** Listing photos from most recent sale (exterior, interior if captured)
+- **Method:** Crawl Zillow property page by address → extract primary listing photo URL(s)
+- **Note:** Only available for properties that have been listed on Zillow. Vacant land rarely has listing photos. Store up to 3 photos.
+- **Legal:** Zillow photos are scraping-gray-area. Store URL references; fetch image on display (don't bulk-store Zillow images locally).
+
+#### Image Storage
+```
+/data/property-images/
+  {parcel_id}/
+    gis_parcel_map.png          # ArcGIS or GIS viewer screenshot
+    street_view.jpg             # Google Street View
+    satellite.jpg               # Google satellite
+    zillow_1.jpg                # Zillow listing photos (when available)
+    zillow_2.jpg
+    zillow_3.jpg
+```
+
+---
+
+### 8.3 Evidence & Citation Model
+
+Every data point in the report has a citation. Citations are stored as structured objects, not just URLs.
+
+#### Citation structure (per data point)
+```json
+{
+  "source_type": "tax_collector",
+  "source_name": "Orange County Tax Collector",
+  "url": "https://octaxcol.com/taxbills/parcel/123-456-789",
+  "retrieved_at": "2026-03-13T14:22:00Z",
+  "screenshot_path": "/data/screenshots/123-456-789/tax_collector_20260313.png",
+  "screenshot_crop": {"x": 120, "y": 340, "w": 680, "h": 210},
+  "data_extracted": ["lien_amount", "tax_year", "redemption_deadline"]
+}
+```
+
+#### Screenshot behavior
+- **Agent captures:** Full-page Playwright screenshot of every source page at time of data extraction
+- **Stored locally:** Full PNG at `/data/screenshots/{parcel_id}/{source_type}_{date}.png`
+- **UI shows:** Cropped region (`screenshot_crop` bounding box) highlighting the relevant data
+- **Mouseover / click:** Expands to full-page screenshot in a modal overlay
+- **In PDF export:** Cropped screenshot embedded inline next to the cited data (toggleable — default ON for personal use, optional for shareable reports)
+
+#### Source types and their screenshots
+| Source Type | What gets screenshotted |
+|-------------|------------------------|
+| `tax_collector` | Page showing lien amount, year, deadline |
+| `assessor` | Parcel detail page with owner and assessed value |
+| `recorder` | Deed entry showing grantor/grantee and date |
+| `sos` | Secretary of State entity filing page |
+| `court` | Case summary page (if litigation found) |
+| `gis` | GIS portal map view of the parcel |
+| `zillow` | Property listing page (if present) |
+
+---
+
+### 8.4 Per-Parcel Report Schema (updated)
 
 ```json
 {
   "parcel_id": "123-456-789",
   "address": "123 Main St, Anytown, CA 90210",
+  "coordinates": {"lat": 33.7490, "lng": -117.8678},
+
+  "images": {
+    "gis_parcel_map": "/data/property-images/123-456-789/gis_parcel_map.png",
+    "street_view": "/data/property-images/123-456-789/street_view.jpg",
+    "satellite": "/data/property-images/123-456-789/satellite.jpg",
+    "zillow": ["/data/property-images/123-456-789/zillow_1.jpg"],
+    "captured_at": "2026-03-13T14:22:00Z"
+  },
+
   "lien": {
     "amount": 12500.00,
     "years_delinquent": 3,
@@ -491,9 +617,14 @@ Re-ranking:       Cross-encoder re-rank for precision-critical lookups
     "filing_date": "2023-01-15",
     "redemption_deadline": "2026-01-15",
     "certificate_number": "2023-001234",
-    "source_url": "https://countytax.gov/...",
-    "retrieved_date": "2026-03-13"
+    "citation": {
+      "url": "https://octaxcol.com/taxbills/parcel/123-456-789",
+      "screenshot_path": "/data/screenshots/123-456-789/tax_collector_20260313.png",
+      "screenshot_crop": {"x": 120, "y": 340, "w": 680, "h": 210},
+      "retrieved_at": "2026-03-13T14:22:00Z"
+    }
   },
+
   "property": {
     "legal_description": "Lot 5, Block 3, Sunset Subdivision",
     "acreage": 0.25,
@@ -503,8 +634,15 @@ Re-ranking:       Cross-encoder re-rank for precision-critical lookups
     "assessed_value": 185000,
     "estimated_market_value": 310000,
     "last_sale_date": "2018-06-01",
-    "last_sale_price": 220000
+    "last_sale_price": 220000,
+    "citation": {
+      "url": "https://assessor.ocgov.com/parcel/123-456-789",
+      "screenshot_path": "/data/screenshots/123-456-789/assessor_20260313.png",
+      "screenshot_crop": {"x": 0, "y": 200, "w": 900, "h": 400},
+      "retrieved_at": "2026-03-13T14:25:00Z"
+    }
   },
+
   "owner": {
     "owner_of_record": "Acme Holdings LLC",
     "owner_type": "entity",
@@ -516,12 +654,21 @@ Re-ranking:       Cross-encoder re-rank for precision-critical lookups
       "officers": ["John Smith (Manager)"],
       "sos_filing_url": "https://bizfile.sos.ca.gov/...",
       "status": "Active",
-      "formation_date": "2015-03-22"
+      "formation_date": "2015-03-22",
+      "citation": {
+        "url": "https://bizfile.sos.ca.gov/...",
+        "screenshot_path": "/data/screenshots/123-456-789/sos_20260313.png",
+        "screenshot_crop": {"x": 0, "y": 100, "w": 800, "h": 350},
+        "retrieved_at": "2026-03-13T14:30:00Z"
+      }
     },
     "beneficial_owner_research": {
       "probable_owner": "John Smith",
       "confidence": "medium",
-      "evidence": ["SOS filing manager", "LinkedIn: John Smith lists Acme Holdings on profile"],
+      "evidence": [
+        {"fact": "SOS filing lists John Smith as Manager", "citation_index": 2},
+        {"fact": "LinkedIn: John Smith lists Acme Holdings on profile", "citation_index": 4}
+      ],
       "contact_info": {
         "phone": "TBD",
         "email": "TBD",
@@ -529,17 +676,35 @@ Re-ranking:       Cross-encoder re-rank for precision-critical lookups
       }
     }
   },
+
   "opportunity_score": 72,
   "score_rationale": "High lien-to-value ratio (4.6%). 3 years delinquent. LLC owner with obscured beneficial ownership. Zoning allows development.",
   "flags": ["Owner entity delinquent", "No active mortgage found", "Possible absentee owner"],
-  "sources": [
-    {"url": "https://countytax.gov/parcel/123-456-789", "type": "tax_lien", "date": "2026-03-13"},
-    {"url": "https://assessor.county.gov/...", "type": "assessor", "date": "2026-03-13"}
+
+  "all_citations": [
+    {
+      "index": 1,
+      "source_type": "tax_collector",
+      "source_name": "Orange County Tax Collector",
+      "url": "https://octaxcol.com/taxbills/parcel/123-456-789",
+      "screenshot_path": "/data/screenshots/123-456-789/tax_collector_20260313.png",
+      "retrieved_at": "2026-03-13T14:22:00Z"
+    },
+    {
+      "index": 2,
+      "source_type": "sos",
+      "source_name": "California Secretary of State BizFile",
+      "url": "https://bizfile.sos.ca.gov/...",
+      "screenshot_path": "/data/screenshots/123-456-789/sos_20260313.png",
+      "retrieved_at": "2026-03-13T14:30:00Z"
+    }
   ]
 }
 ```
 
-### 8.2 Summary Report (batch run)
+---
+
+### 8.5 Summary Report (batch run)
 
 ```markdown
 # Tax Lien Research Report
@@ -572,6 +737,7 @@ Language:         Python 3.12+
 Agent Framework:  Pydantic AI (type-safe tools) + Claude Agent SDK (multi-agent coordination)
 LLM:              Claude Sonnet 4.6 (deep research/reasoning), Haiku 4.5 (fast structured lookups)
 Web Crawling:     crawl4ai (structured sites) + agent-browser (JS-heavy portals, forms)
+Screenshots:      Playwright (full-page capture of every source page at extraction time)
 Primary DB:       PostgreSQL 16 + pgvector (parcels, liens, owners, research state, embeddings)
 Analytical Layer: DuckDB sidecar — queries Parquet snapshots exported from PostgreSQL
 Job Queue:        Phase 1: PostgreSQL SKIP LOCKED (built-in, no extra infra)
@@ -583,6 +749,15 @@ Containerization: Docker + docker-compose
 UI:               Archon2.0 framework (React + TanStack Query + FastAPI)
 Scheduler:        APScheduler (Python) for database subagent cron jobs
 Connection Pool:  Phase 3: PgBouncer (added at 100K+ parcels for connection scaling)
+PDF Export:       WeasyPrint (Python, HTML→PDF with embedded images)
+
+--- Imagery APIs ---
+GIS Parcel Maps:  County ArcGIS REST exportImage endpoint (primary)
+                  Playwright screenshot of county GIS viewer (fallback)
+Street View:      Google Street View Static API ($7/1K requests)
+Satellite:        Google Maps Static API — maptype=satellite ($2/1K requests)
+Listing Photos:   Zillow crawl via crawl4ai (URL reference only; fetch on display)
+Geocoding:        Google Geocoding API (address → lat/lng for all image requests)
 ```
 
 ### 9.2 Phased Rollout Plan
@@ -761,9 +936,10 @@ ORDER BY redemption_deadline ASC;
 |--------|---------|-----------|
 | `county-assessor-mcp` | Query county assessor APIs by parcel ID | stdio |
 | `sos-mcp` | Secretary of State business entity lookup | stdio |
-| `gis-mcp` | ArcGIS REST API wrapper for zoning/parcel lookup | stdio |
+| `gis-mcp` | ArcGIS REST API wrapper for zoning/parcel lookup + parcel map export | stdio |
 | `court-records-mcp` | State court public record search | stdio |
 | `ucc-mcp` | UCC lien filing search | stdio |
+| `image-capture-mcp` | Orchestrates all image capture: GIS map, Street View, satellite, Zillow; stores files; returns paths + crop hints | stdio |
 
 ### 9.6 Database Schema (Full)
 
@@ -977,6 +1153,44 @@ CREATE TABLE alerts (
   sent         BOOLEAN DEFAULT FALSE,
   created_at   TIMESTAMP DEFAULT NOW()
 );
+
+-- =============================================
+-- PROPERTY IMAGES (GIS map, street view, satellite, listing)
+-- =============================================
+CREATE TABLE property_images (
+  id            SERIAL PRIMARY KEY,
+  parcel_id     TEXT REFERENCES parcels(parcel_id) ON DELETE CASCADE,
+  image_type    TEXT NOT NULL,  -- gis_parcel_map|street_view|satellite|zillow_listing
+  file_path     TEXT NOT NULL,  -- local path: /data/property-images/{parcel_id}/{type}.jpg
+  source_url    TEXT,           -- API endpoint or page URL used to generate image
+  width         INTEGER,
+  height        INTEGER,
+  captured_at   TIMESTAMP DEFAULT NOW(),
+  -- For GIS maps: record which overlays were active
+  overlays      TEXT[],         -- e.g. ['zoning', 'parcel_boundaries']
+  UNIQUE(parcel_id, image_type)
+);
+
+-- =============================================
+-- SOURCE SCREENSHOTS (evidence capture)
+-- =============================================
+CREATE TABLE source_screenshots (
+  id              SERIAL PRIMARY KEY,
+  parcel_id       TEXT REFERENCES parcels(parcel_id) ON DELETE CASCADE,
+  source_type     TEXT NOT NULL,  -- tax_collector|assessor|recorder|sos|court|gis|zillow
+  source_name     TEXT,           -- human-readable: "Orange County Tax Collector"
+  source_url      TEXT NOT NULL,
+  file_path       TEXT NOT NULL,  -- full-page PNG: /data/screenshots/{parcel_id}/{type}_{date}.png
+  -- Crop hint for UI display (highlights the relevant data region)
+  crop_x          INTEGER,
+  crop_y          INTEGER,
+  crop_w          INTEGER,
+  crop_h          INTEGER,
+  -- Fields confirmed from this screenshot
+  data_extracted  TEXT[],         -- e.g. ['lien_amount', 'tax_year', 'redemption_deadline']
+  captured_at     TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX idx_screenshots_parcel ON source_screenshots(parcel_id);
 ```
 
 ---

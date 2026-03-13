@@ -44,20 +44,11 @@ These block PRD finalization. Answer these before proceeding to implementation.
 
 ### A.2 Output & Delivery
 
-- [ ] **A.2.1** What format do you want the output?
-  - Markdown report per parcel
-  - JSON/structured data (for import into a database or spreadsheet)
-  - PDF report
-  - Dashboard (web UI)
-  - Spreadsheet (CSV/Excel)
-  - Combination?
+- [x] **A.2.1** What format do you want the output?
+  - **Decision:** Both web UI (Archon2.0 card+split view) AND PDF export (on-demand, toggleable inclusion of screenshots). Web is primary working view; PDF for sharing. See PRD §8.1.
 
-- [ ] **A.2.2** Where should results be saved?
-  - Local files (this machine)
-  - Database (PostgreSQL, Supabase)
-  - Airtable
-  - Google Sheets
-  - Other?
+- [x] **A.2.2** Where should results be saved?
+  - **Decision:** Local PostgreSQL database (this machine). Property images + screenshots stored to local filesystem under `/data/`. DuckDB for analytics queries over the dataset.
 
 - [ ] **A.2.3** Do you want alerts when high-value liens are found?
   - Email?
