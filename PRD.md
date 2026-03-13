@@ -1,0 +1,1029 @@
+# Product Requirements Document: Aloha — Tax Lien Research Agent
+**Version:** 0.3
+**Date:** 2026-03-13
+**Status:** ACTIVE DEVELOPMENT — core scope confirmed, database architecture finalized
+
+---
+
+## Table of Contents
+1. [Executive Summary](#1-executive-summary)
+2. [Use Cases & Goals](#2-use-cases--goals)
+3. [Agent Architecture](#3-agent-architecture)
+4. [Research Pipeline](#4-research-pipeline)
+5. [Data Sources](#5-data-sources)
+6. [Feature Requirements](#6-feature-requirements)
+7. [RAG Design](#7-rag-design)
+8. [Output & Reporting](#8-output--reporting)
+9. [Tech Stack](#9-tech-stack)
+10. [Security & Legal Considerations](#10-security--legal-considerations)
+11. [Open Questions](#11-open-questions)
+
+---
+
+## 1. Executive Summary
+
+The **Tax Lien Research Agent** is a multi-stage AI agent that autonomously discovers tax liens on land parcels, researches the property and its owner(s), and delivers a structured intelligence report for each lien found.
+
+The agent combines:
+- **RAG over government websites** — county tax assessor, treasurer, and recorder sites to find active tax liens and parcel data
+- **Owner research** — public records, Secretary of State filings, social media, and property deed history to identify who owns each parcel
+- **Zoning & land use research** — municipal planning and zoning databases
+- **Business entity research** — when a parcel is owned by an LLC, trust, or corporation
+- **Priority scoring** — rank liens by investment potential or research relevance
+
+> **⚠️ NOTE:** Geographic scope, primary use case, output format, and monitoring cadence are pending user input. See `toresearch.md`.
+
+---
+
+## 2. Use Cases & Goals
+
+### 2.1 Primary Use Case: Tax Lien Investment Research
+The agent's primary purpose is **investment due diligence** — providing deep, actionable intelligence to evaluate whether a tax lien is worth pursuing as an investment. This means:
+- Finding liens before they go to auction or expire
+- Understanding the true value of the underlying property
+- Identifying the real owner(s) so outreach or negotiation is possible
+- Assessing risk (environmental, title, zoning, litigation)
+- Scoring opportunities so the best ones surface first
+
+**All property types included:** residential, commercial, vacant land, industrial, agricultural.
+
+**Geographic scope:** Configurable at runtime — target any US county/state. Start with a single county for validation, then generalize.
+
+### 2.2 Agent Goals
+1. **Discovery** — Find parcels with active tax liens in a target geographic area
+2. **Owner identification** — Determine the true beneficial owner (individual or entity) — as deep as possible
+3. **Lien valuation** — Capture lien amount, years delinquent, interest/penalties, redemption deadline
+4. **Property characterization** — Zoning, land use, acreage, assessed value, market value estimate
+5. **Entity piercing** — For LLC/trust owners: identify beneficial owner through SOS, deed chains, registered agents
+6. **Risk assessment** — Environmental flags, litigation, title issues, flood zone, liens from other creditors
+7. **Market context** — Comparable sales, neighborhood trends, development potential
+8. **Opportunity scoring** — Rank liens by investment merit (lien-to-value ratio, owner motivation, property potential)
+9. **Continuous monitoring** — Database maintained by subagent; stale records auto-refreshed on schedule
+
+---
+
+## 3. Agent Architecture
+
+### 3.1 Fluid Pipeline Design Principles
+
+The pipeline is **state-machine-driven**, not sequential. Every parcel record in the database tracks its research stage. The pipeline can:
+- Start, stop, and resume at any stage without data loss
+- Handle failures at any stage with automatic retry + backoff
+- Process new data sources without re-running completed stages
+- Work on thousands of parcels concurrently via parallel subagents
+- Be interrupted (network down, rate-limited) and resume exactly where it left off
+
+```
+PARCEL RESEARCH STATES:
+  discovered → parcel_researched → owner_researched → enriched → scored → complete
+       ↑               ↑                 ↑                ↑          ↑
+    [retry]         [retry]           [retry]          [retry]    [retry]
+       ↓               ↓                 ↓                ↓          ↓
+    failed_1       failed_2          failed_3         failed_4   failed_5
+
+LIEN STATES (separate from parcel):
+  active → redeemed | foreclosed | auctioned | expired
+
+DATABASE STATES (managed by Refresh Subagent):
+  fresh (< 24h) → stale (24h-7d) → expired (> 7d) → needs_recrawl
+```
+
+### 3.2 High-Level Flow
+
+```
+[Target Location Input]
+        │
+        ▼
+┌──────────────────────────────────────────────┐
+│  DATABASE SUBAGENT (always running)          │
+│  - Schedules crawl jobs                      │
+│  - Marks stale records for refresh           │
+│  - Detects lien status changes (paid/active) │
+│  - Manages rate limiting per domain          │
+└──────────────┬───────────────────────────────┘
+               │ writes to / reads from
+               ▼
+┌──────────────────────────────────────────────┐
+│  ALOHA CENTRAL DATABASE (PostgreSQL)         │
+│  parcels | liens | owners | entities |       │
+│  research_queue | crawl_log | scores         │
+└──────────────┬───────────────────────────────┘
+               │
+       ┌───────┴───────┐
+       │               │
+       ▼               ▼
+┌────────────┐  ┌────────────────────────────────────┐
+│  Stage 1   │  │  Parallel Research Workers         │
+│  Discovery │  │  (each pulls from research_queue)  │
+│  Agent     │  │                                    │
+│            │  │  ┌──────────┐  ┌──────────┐        │
+│  Discovers │  │  │ Parcel   │  │ Owner    │        │
+│  liens →   │  │  │ Research │  │ Research │        │
+│  writes to │  │  │ Agent    │  │ Agent    │        │
+│  queue     │  │  └──────────┘  └──────────┘        │
+└────────────┘  │  ┌──────────┐  ┌──────────┐        │
+                │  │ Entity   │  │ Enrichmt │        │
+                │  │ Research │  │ Agent    │        │
+                │  │ Agent    │  │          │        │
+                │  └──────────┘  └──────────┘        │
+                └────────────────────────────────────┘
+                               │
+                               ▼
+                    ┌──────────────────┐
+                    │  Scoring Agent   │
+                    │  + Report Agent  │
+                    └──────────────────┘
+```
+
+### 3.3 Agent Types
+
+| Agent | Role | Tools | Runs |
+|-------|------|-------|------|
+| **Database Subagent** | Maintains DB freshness, schedules crawl jobs, detects changes | PostgreSQL, crawl4ai, scheduler | Always (background) |
+| **Orchestrator** | Coordinates all stages, pulls from research queue | All | On-demand + scheduled |
+| **Lien Discovery Agent** | Crawls county tax/treasurer sites for active liens | crawl4ai, agent-browser | Per target county |
+| **Parcel Research Agent** | Extracts parcel details from assessor/recorder/GIS | crawl4ai, ArcGIS API | Per parcel |
+| **Owner Research Agent** | Deep owner identification — public records, deed chains | crawl4ai, search APIs | Per parcel |
+| **Entity Research Agent** | LLC/trust/corp research — SOS, UCC, related entities | SOS APIs, crawl4ai | Per entity owner |
+| **Contact Research Agent** | Find phone, email, social profiles for owners | People APIs, browser | Per owner |
+| **Zoning Research Agent** | Zoning, permits, development potential | GIS APIs, crawl4ai | Per parcel |
+| **Enrichment Agent** | Comps, news mentions, litigation, environmental | Zillow, EPA, courts | Per parcel |
+| **Scoring Agent** | Ranks liens by investment potential | LLM reasoning | Per parcel |
+| **Report Agent** | Compiles findings into structured investment brief | LLM + templates | On-demand |
+
+### 3.4 Orchestration Pattern
+- **Queue-driven** — Each parcel is a job in the research queue; agents pull and process
+- **Parallel execution** — Owner + Entity + Zoning research run concurrently after parcel data is retrieved
+- **State machine** — Each parcel has a research_status; agents only pick up parcels in the right state
+- **Idempotent stages** — Re-running a stage updates existing records, never creates duplicates
+- **Human-in-the-loop** — Pause for review when beneficial ownership cannot be determined, or lien value exceeds configurable threshold
+- **Failure isolation** — One parcel failing doesn't block others; failed parcels retry with exponential backoff
+
+---
+
+## 4. Research Pipeline
+
+### 4.1 Stage 1: Lien Discovery
+
+**Target sources (priority order):**
+1. County Tax Collector / Treasurer website (official)
+2. County Tax Assessor website (official)
+3. State-level tax delinquency lists (some states publish these)
+4. County Clerk / Recorder of Deeds (official)
+5. State tax authority (e.g., state revenue/taxation dept)
+6. Third-party aggregators (Zillow, Realtor.com) — lower priority
+
+**Data to capture per lien:**
+- Parcel ID / APN (Assessor Parcel Number)
+- Property address (if available)
+- Legal description
+- Tax year(s) delinquent
+- Amount owed (principal)
+- Interest and penalties
+- Lien filing date
+- Lien expiration / redemption deadline
+- Auction date (if scheduled)
+- Certificate number (if applicable)
+
+**Crawl strategy:**
+- Use crawl4ai for structured government sites
+- Use agent-browser for JavaScript-heavy search portals
+- Cache results with TTL (24-48h) to avoid repeated crawls
+- Respect robots.txt; throttle requests (1-2 req/sec)
+
+### 4.2 Stage 2: Parcel Research
+
+**Target sources:**
+1. County Assessor database (parcel details, assessed value, land use code)
+2. County Recorder / Register of Deeds (deed history, title chain)
+3. GIS/mapping portals (many counties have public ArcGIS)
+4. State GIS data portals
+
+**Data to capture:**
+- Current owner name(s) of record
+- Mailing address of owner
+- Property legal description
+- Acreage / lot size
+- Land use code / property type
+- Assessed land value + improvement value
+- Year built (if structure exists)
+- Last sale date + price
+- Deed type (warranty, quitclaim, trust deed)
+- Mortgage / deed of trust filings
+
+### 4.3 Stage 3: Deep Owner Research
+
+Owner research is the most critical stage for investment purposes — knowing the real owner enables direct outreach, negotiation, and risk assessment. The goal is to identify not just the recorded owner but the **beneficial human** behind any entity, and find a way to contact them.
+
+#### 3a. Individual Owner Research
+
+**Layer 1 — Public Records (fastest, always first):**
+- County assessor mailing address (from Stage 2)
+- Voter registration records (public in most states)
+- Property records cross-reference (same owner, other counties — find pattern of tax delinquency)
+- Deed chain history (when did they acquire? at what price? what type of deed?)
+- Court records: civil judgments, bankruptcies, foreclosures — PACER + state court portals
+- Death records / obituaries (is owner deceased? estate situation?)
+- UCC filings (secured debts against the individual)
+
+**Layer 2 — People Research:**
+- Whitepages / Spokeo / BeenVerified — phone, address, relatives, associates
+- USPS address verification on mailing address
+- Reverse address lookup (who else lives there?)
+- Reverse phone lookup
+- Email finder (Hunter.io, Clearbit Reveal)
+- Relative network mapping (family members who may hold related properties)
+
+**Layer 3 — Social & Professional:**
+- LinkedIn — professional history, current employer, connections
+- Facebook — local presence, business pages
+- Twitter/X — mentions of property or local real estate activity
+- Google search: `"[owner name]" "[city/state]"` news/mentions
+- Business affiliations (are they connected to any LLCs/entities?)
+
+**Layer 4 — Financial Health:**
+- Federal tax liens (IRS public lien search)
+- State tax liens
+- Judgment liens from court records
+- Bankruptcy history (PACER)
+- Pattern of delinquency on other properties
+
+#### 3b. Entity Owner Research (LLC / Corporation)
+
+**Layer 1 — Formation Documents:**
+- Secretary of State filing: registered agent, organizer, managers/members, officers
+- State of formation vs. state where property is located (foreign entity? registered in both?)
+- Date of formation, duration, status (active/dissolved/revoked)
+- Annual report filings (disclose current managers in many states)
+
+**Layer 2 — Beneficial Owner Identification:**
+- Cross-reference manager/member names against assessor records in same county
+- Same registered agent = probable common owner (research agent's other clients)
+- Registered agent is a professional service (CT Corp, Northwest Registered Agent) → harder, but agent's client list sometimes obtainable
+- Related LLCs: same address, same manager, same phone — map the entity network
+- OpenCorporates API: find all entities associated with same address or manager name
+- Delaware/Wyoming LLCs: minimal disclosure → check state where property is located for foreign registration
+
+**Layer 3 — Financial & Operational:**
+- UCC filings: who has security interests in the entity's assets? (reveals lenders and structure)
+- Federal tax lien search (IRS) against entity name and EIN
+- State tax liens against entity
+- Litigation: PACER + state courts — as plaintiff and defendant
+- Business news, press releases, LinkedIn company page
+- Glassdoor, Indeed reviews (reveals operational status)
+- BBB complaints, Yelp, Google Business (is this an active business?)
+- Real estate license checks (if owner appears to be a developer/broker)
+
+**Layer 4 — Contact Resolution:**
+- Manager name → individual research (Layer 1-3 above)
+- Registered office address → Google Maps, street view (real office or mailbox?)
+- Phone number from SOS filing, business listings, website
+- Email from domain associated with entity (Hunter.io email finder)
+- Website: `[entityname].com` — check WHOIS for registrant contact
+
+#### 3c. Trust Owner Research
+
+**Layer 1 — Trust Identification:**
+- Trust name in deed (e.g., "Smith Family Living Trust dated 2015")
+- Trustee name from deed (often an individual — research as individual above)
+- Trust instrument (sometimes recorded at county recorder — search for it)
+- Date of trust = approximate age/estate planning timeline
+
+**Layer 2 — Trustee Research:**
+- Apply full individual or entity research to the trustee
+- Professional trustee (bank/trust company) → contact the trust department
+- Successor trustee (named in trust instrument if found)
+
+**Layer 3 — Beneficiary Research:**
+- If trustee is deceased: probate records may reveal beneficiaries
+- Property transfers out of trust: who received it? (deed chain)
+- Court records: trust disputes often filed publicly
+
+#### 3d. Research Confidence Scoring
+
+Every owner research result gets a confidence score:
+
+| Score | Meaning | Criteria |
+|-------|---------|---------|
+| **High (80-100)** | Highly confident in true owner identity | Individual named in deed + address verified + phone/email confirmed |
+| **Medium (50-79)** | Probable owner identified, contact method found | Entity pierced to individual + one contact method found |
+| **Low (20-49)** | Owner identified but contact info unconfirmed | Name found, address undeliverable, no phone/email |
+| **Unknown (0-19)** | Ownership obscured, could not pierce | DE LLC with professional registered agent, no usable contacts |
+
+### 4.4 Stage 4: Enrichment
+
+**Zoning research:**
+- Municipal/county zoning maps (GIS)
+- Zoning classification (residential, commercial, agricultural, industrial)
+- Overlay districts (flood zone, historic, etc.)
+- Development potential / permitted uses
+- Recent variance or permit activity
+
+**Market context:**
+- Comparable sales (Zillow, county assessor)
+- Estimated market value
+- Days on market for similar properties
+- Neighborhood trend (appreciating/depreciating)
+
+**News and legal mentions:**
+- Property address in news
+- Owner name in litigation
+- Business mentions (if entity owner)
+- Environmental issues / EPA records
+
+---
+
+## 5. Data Sources
+
+### 5.1 Official Government Sources (Highest Priority)
+
+| Source Type | Access Method | Data Available |
+|-------------|---------------|----------------|
+| County Tax Collector/Treasurer | Web crawl + some have APIs | Active liens, delinquency lists, auction schedules |
+| County Assessor | Web crawl + ArcGIS REST APIs | Parcel data, ownership, assessed value |
+| County Recorder/Clerk | Web crawl | Deed history, mortgage filings |
+| State Revenue/Tax Dept | Web crawl | State tax liens (separate from property tax) |
+| Secretary of State | Web crawl + some APIs | Entity registration, officers, registered agent |
+| State UCC Filing Office | Web crawl | Secured party liens on personal property |
+| County GIS Portal | ArcGIS REST API | Parcel boundaries, zoning, land use |
+| Municipal Planning Dept | Web crawl | Zoning codes, permits, variances |
+| PACER (Federal Courts) | API ($0.10/page) | Federal litigation |
+| State Court Portals | Web crawl | Civil/criminal filings |
+
+### 5.2 Semi-Official / Aggregator Sources
+
+| Source | Data | Notes |
+|--------|------|-------|
+| Zillow / Realtor.com | Market value estimates, sale history | Secondary verification |
+| ATTOM Data | Comprehensive property data | **Paid API — TBD if available** |
+| PropStream | Tax liens, pre-foreclosure | **Paid — TBD** |
+| FEMA Flood Map | Flood zone designation | Free |
+| EPA ECHO | Environmental compliance | Free API |
+| OpenCorporates | Business entity data | Free tier + paid |
+
+### 5.3 Social Media Sources
+
+| Platform | Use Case | Method |
+|----------|----------|--------|
+| LinkedIn | Business owner identity, company info | Browser automation (no official API for scraping) |
+| Facebook | Personal owner research, local business pages | Browser automation |
+| Instagram | Business owner research | Browser automation |
+| Twitter/X | Mentions of owner or property | API (paid) or browser |
+
+> **⚠️ Legal note:** Social media scraping may violate ToS. See Section 10.
+
+### 5.4 Public Records Aggregators
+
+| Source | Data | Cost |
+|--------|------|------|
+| Whitepages Pro | Phone, address, relatives | Paid API |
+| BeenVerified | Background, associates | Paid |
+| Spokeo | Contact info, social profiles | Paid |
+| TruthFinder | Background data | Paid |
+| Melissa Data | Address verification, owner lookup | Paid API |
+
+> **⚠️ TBD:** Budget for paid data sources not yet determined. See `toresearch.md`.
+
+---
+
+## 6. Feature Requirements
+
+### 6.1 Core Features (Must-Have)
+
+| Feature | Description | Priority |
+|---------|-------------|----------|
+| **Location-based search** | Input: county + state (or ZIP code); discover all active tax liens | P0 |
+| **Parcel data extraction** | Extract APN, address, owner, assessed value, legal description | P0 |
+| **Lien data extraction** | Capture amount, year, deadline, certificate number | P0 |
+| **Owner identification** | Identify individual or entity owner from public records | P0 |
+| **Entity piercing** | For LLC/trust owners: find beneficial owner via SOS and related filings | P0 |
+| **Zoning lookup** | Retrieve zoning classification and permitted uses per parcel | P1 |
+| **Structured report** | Output per-parcel research report in markdown or JSON | P0 |
+| **Source citation** | Every data point includes its source URL and retrieval date | P0 |
+| **Rate limiting / politeness** | Throttle crawl requests; respect government site limits | P0 |
+| **Progress persistence** | Save state so research can resume after interruption | P1 |
+
+### 6.2 Advanced Features (Nice-to-Have)
+
+| Feature | Description | Priority |
+|---------|-------------|----------|
+| **Opportunity scoring** | Score each lien by investment potential (amount, age, property value) | P1 |
+| **Social media owner research** | LinkedIn/Facebook search for owner identity and contact | P2 |
+| **Comparable sales** | Pull recent comparable sales for market context | P2 |
+| **Monitoring mode** | Continuously monitor for new liens in a target area | P2 |
+| **Alert system** | Notify when high-value lien is found (email/Slack) | P2 |
+| **Bulk processing** | Research hundreds of parcels in a single run | P1 |
+| **Deduplication** | Avoid re-researching already-known parcels | P1 |
+| **News mentions** | Search news for owner or property mentions | P2 |
+| **Environmental flags** | Flag parcels with EPA records or brownfield status | P2 |
+| **Litigation research** | Check court records for lawsuits against owner | P2 |
+| **Multi-county search** | Expand search across multiple counties in one run | P2 |
+
+---
+
+## 7. RAG Design
+
+### 7.1 Knowledge Base Structure
+
+```
+tax-lien-kb/
+├── government-sites/
+│   ├── {county}-{state}/
+│   │   ├── tax-collector/      # Crawled lien data
+│   │   ├── assessor/           # Parcel data
+│   │   ├── recorder/           # Deed records
+│   │   └── gis/                # Zoning/parcel maps
+├── entity-research/
+│   ├── sos-filings/            # Secretary of State records
+│   └── ucc-filings/            # UCC liens
+├── owner-research/
+│   ├── public-records/
+│   └── social-media-summaries/ # Summarized findings (not raw scrapes)
+└── market-data/
+    └── comps/                  # Comparable sales data
+```
+
+### 7.2 Chunking Strategy
+
+| Document Type | Chunk Strategy | Chunk Size |
+|---------------|---------------|------------|
+| Tax lien listings | Per lien record | ~200 tokens |
+| Parcel data pages | Per field group (owner, value, description) | ~300 tokens |
+| Deed documents | Per grantor/grantee transaction | ~400 tokens |
+| SOS filings | Per filing/entity | ~300 tokens |
+| Zoning codes | Per zone definition | ~500 tokens |
+| News articles | Sliding window | ~400 tokens, 50 overlap |
+
+### 7.3 Embedding & Vector Search
+
+```
+Embedding model:  text-embedding-3-small (local via Ollama or OpenAI)
+Vector store:     PostgreSQL + pgvector
+Index:            HNSW (fast approximate nearest neighbor)
+Retrieval:        Top-k = 5-10 chunks per query
+Re-ranking:       Cross-encoder re-rank for precision-critical lookups
+```
+
+### 7.4 Query Types
+
+| Query | Strategy |
+|-------|---------|
+| "Find all liens in {county} with amount > $5,000" | Structured filter + vector search |
+| "Who owns parcel {APN}?" | Direct lookup + vector fallback |
+| "What is the zoning for this address?" | Vector search + GIS API |
+| "What entities is {owner name} associated with?" | Graph traversal + vector search |
+
+---
+
+## 8. Output & Reporting
+
+### 8.1 Per-Parcel Research Report (draft schema)
+
+```json
+{
+  "parcel_id": "123-456-789",
+  "address": "123 Main St, Anytown, CA 90210",
+  "lien": {
+    "amount": 12500.00,
+    "years_delinquent": 3,
+    "interest_penalties": 1875.00,
+    "total_owed": 14375.00,
+    "filing_date": "2023-01-15",
+    "redemption_deadline": "2026-01-15",
+    "certificate_number": "2023-001234",
+    "source_url": "https://countytax.gov/...",
+    "retrieved_date": "2026-03-13"
+  },
+  "property": {
+    "legal_description": "Lot 5, Block 3, Sunset Subdivision",
+    "acreage": 0.25,
+    "land_use": "Single Family Residential",
+    "zoning": "R-1",
+    "zoning_notes": "Min lot size 6,000 sqft. Max height 35ft.",
+    "assessed_value": 185000,
+    "estimated_market_value": 310000,
+    "last_sale_date": "2018-06-01",
+    "last_sale_price": 220000
+  },
+  "owner": {
+    "owner_of_record": "Acme Holdings LLC",
+    "owner_type": "entity",
+    "entity": {
+      "type": "LLC",
+      "state_of_formation": "DE",
+      "registered_in_state": "CA",
+      "registered_agent": "National Registered Agents Inc.",
+      "officers": ["John Smith (Manager)"],
+      "sos_filing_url": "https://bizfile.sos.ca.gov/...",
+      "status": "Active",
+      "formation_date": "2015-03-22"
+    },
+    "beneficial_owner_research": {
+      "probable_owner": "John Smith",
+      "confidence": "medium",
+      "evidence": ["SOS filing manager", "LinkedIn: John Smith lists Acme Holdings on profile"],
+      "contact_info": {
+        "phone": "TBD",
+        "email": "TBD",
+        "mailing_address": "456 Oak Ave, Beverly Hills, CA 90210"
+      }
+    }
+  },
+  "opportunity_score": 72,
+  "score_rationale": "High lien-to-value ratio (4.6%). 3 years delinquent. LLC owner with obscured beneficial ownership. Zoning allows development.",
+  "flags": ["Owner entity delinquent", "No active mortgage found", "Possible absentee owner"],
+  "sources": [
+    {"url": "https://countytax.gov/parcel/123-456-789", "type": "tax_lien", "date": "2026-03-13"},
+    {"url": "https://assessor.county.gov/...", "type": "assessor", "date": "2026-03-13"}
+  ]
+}
+```
+
+### 8.2 Summary Report (batch run)
+
+```markdown
+# Tax Lien Research Report
+**Location:** {County}, {State}
+**Run Date:** {date}
+**Total Liens Found:** {n}
+**Liens Fully Researched:** {n}
+**High-Priority Opportunities:** {n}
+
+## Top 10 Opportunities
+| Rank | Address | Lien Amount | Owner | Score | Notes |
+|------|---------|-------------|-------|-------|-------|
+| 1    | ...     | $14,375     | LLC   | 72    | ...   |
+...
+
+## Research Gaps
+- {n} parcels where owner could not be identified
+- {n} parcels where zoning data was unavailable
+```
+
+---
+
+## 9. Tech Stack
+
+### 9.1 Core Stack
+
+```
+Agent Name:       Aloha
+Language:         Python 3.12+
+Agent Framework:  Pydantic AI (type-safe tools) + Claude Agent SDK (multi-agent coordination)
+LLM:              Claude Sonnet 4.6 (deep research/reasoning), Haiku 4.5 (fast structured lookups)
+Web Crawling:     crawl4ai (structured sites) + agent-browser (JS-heavy portals, forms)
+Primary DB:       PostgreSQL 16 + pgvector (parcels, liens, owners, research state, embeddings)
+Analytical Layer: DuckDB sidecar — queries Parquet snapshots exported from PostgreSQL
+Job Queue:        Phase 1: PostgreSQL SKIP LOCKED (built-in, no extra infra)
+                  Phase 2: Celery + Redis (added when scheduling UI and rate-limit features needed)
+ORM:              SQLAlchemy 2.0 async (Python backend)
+MCP Servers:      Custom MCP for county assessor APIs, SOS APIs, GIS/ArcGIS
+Observability:    Langfuse (trace all agent steps, token costs per parcel)
+Containerization: Docker + docker-compose
+UI:               Archon2.0 framework (React + TanStack Query + FastAPI)
+Scheduler:        APScheduler (Python) for database subagent cron jobs
+Connection Pool:  Phase 3: PgBouncer (added at 100K+ parcels for connection scaling)
+```
+
+### 9.2 Phased Rollout Plan
+
+The system grows in three phases to avoid over-engineering early while preserving a clear upgrade path.
+
+#### Phase 1 — Single County, PostgreSQL Only (Pilot)
+- **Target:** 1 county, ≤ 10K parcels
+- **Stack:** PostgreSQL 16 + pgvector, APScheduler, SQLAlchemy async
+- **Job queue:** `SELECT ... FOR UPDATE SKIP LOCKED` — built into PostgreSQL, no Redis needed
+- **Analytics:** Direct PostgreSQL queries (simple GROUP BY, ORDER BY)
+- **Monitoring:** Langfuse traces, simple log output
+- **Goal:** Validate pipeline correctness, data quality, scoring accuracy
+
+#### Phase 2 — Multi-County, Celery + Vector Search
+- **Trigger:** Expanding to multiple counties, needing rate-limit scheduling across domains
+- **Add:** Celery + Redis for distributed job execution and rate limit management
+- **Add:** pgvector HNSW indexes (activate after Phase 1 data validates embedding approach)
+- **Add:** OpenCorporates / ATTOM API integrations (if budget approved)
+- **Retain:** PostgreSQL as primary store; DuckDB begins receiving Parquet exports for analytics
+
+#### Phase 3 — Production Scale (100K+ Parcels)
+- **Add:** PgBouncer connection pooling (PostgreSQL connections become the bottleneck at scale)
+- **Add:** DuckDB as primary analytics engine (column-scan performance dominates at this scale)
+- **Add:** Parquet snapshot pipeline: PostgreSQL → nightly export → DuckDB queries
+- **Add:** Monitoring dashboard (Archon2.0 UI with investment screening queries served by DuckDB)
+
+### 9.3 Database Subagent Architecture
+
+The **Database Subagent** runs continuously in the background and is responsible for keeping the Aloha database current. It is Aloha's "heartbeat."
+
+```
+Database Subagent Responsibilities:
+  ┌─────────────────────────────────────────────────────┐
+  │  SCHEDULER (APScheduler cron jobs)                  │
+  │                                                     │
+  │  Every 15 min:  Check research_queue for stalled    │
+  │                 jobs (> 1h without progress) →      │
+  │                 reset to retry                      │
+  │                                                     │
+  │  Every 1 hour:  Check liens table for approaching   │
+  │                 redemption deadlines → escalate     │
+  │                 priority                            │
+  │                                                     │
+  │  Every 24h:     Mark parcel records > 7 days old    │
+  │                 as "stale" → queue for recrawl      │
+  │                                                     │
+  │  Every 24h:     Re-crawl county tax site for NEW    │
+  │                 liens added since last run           │
+  │                 (differential crawl via content hash)│
+  │                                                     │
+  │  Weekly:        Re-verify lien status (redeemed?    │
+  │                 auctioned?) for all active liens     │
+  │                                                     │
+  │  On-demand:     Triggered by Orchestrator when a    │
+  │                 specific parcel needs refresh        │
+  └─────────────────────────────────────────────────────┘
+```
+
+**Change detection strategy (3-layer approach):**
+
+1. **Bulk data exports first (preferred):** Many counties publish Socrata datasets or FTP CSV/XML exports. When available, download the full list and diff it — zero crawling needed.
+   ```python
+   # Socrata Open Data API (works for counties on data.gov / county data portals)
+   response = requests.get(
+       "https://{county}.data.socrata.com/resource/{dataset_id}.json",
+       params={"$where": "delinquent_date > '2026-01-01'", "$limit": 50000}
+   )
+   ```
+
+2. **Content hash (always stored, works on 100% of sites):**
+   ```python
+   import hashlib
+   normalized = ' '.join(new_html_content.split())   # collapse whitespace
+   new_hash = hashlib.md5(normalized.encode()).hexdigest()
+   if new_hash == stored_hash:
+       return  # skip — page unchanged
+   ```
+
+3. **Structural field hash (for high-precision change detection on key fields only):**
+   ```python
+   # Only hash fields that matter for investment decisions
+   key_fields = f"{status}|{paid_date}|{auction_date}|{face_amount}"
+   structural_hash = hashlib.md5(key_fields.encode()).hexdigest()
+   ```
+   This avoids false positives from cosmetic site changes (footer updates, ad content, etc.).
+
+4. **HTTP cache headers (bonus ~30% of county sites):** Check `ETag` / `Last-Modified` headers before fetching full page body. Saves bandwidth on sites that support it.
+
+**⚠️ Critical concurrency warning:** Never use `SELECT WHERE status='pending' LIMIT 1` without `FOR UPDATE SKIP LOCKED`. Without it, multiple agents will claim the same job simultaneously, causing duplicate work and data corruption.
+
+**Research queue design:**
+
+```sql
+CREATE TABLE research_queue (
+  id SERIAL PRIMARY KEY,
+  parcel_id TEXT NOT NULL,
+  stage TEXT NOT NULL,           -- discover | parcel | owner | entity | enrich | score
+  priority INTEGER DEFAULT 5,    -- 1=urgent (deadline <30d), 10=low
+  status TEXT DEFAULT 'pending', -- pending | in_progress | done | failed | retry
+  attempts INTEGER DEFAULT 0,
+  last_error TEXT,
+  next_retry_at TIMESTAMP,
+  claimed_by TEXT,               -- agent instance ID (for concurrency safety)
+  claimed_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_queue_pickup ON research_queue(status, priority, next_retry_at)
+  WHERE status IN ('pending', 'retry');
+```
+
+**Agent claims jobs atomically:**
+```sql
+-- Atomic job claim (prevents two agents grabbing same job)
+UPDATE research_queue
+SET status = 'in_progress', claimed_by = $agent_id, claimed_at = NOW()
+WHERE id = (
+  SELECT id FROM research_queue
+  WHERE status IN ('pending', 'retry')
+    AND (next_retry_at IS NULL OR next_retry_at <= NOW())
+  ORDER BY priority ASC, created_at ASC
+  LIMIT 1
+  FOR UPDATE SKIP LOCKED
+)
+RETURNING *;
+```
+
+### 9.4 DuckDB Analytics Sidecar
+
+DuckDB is **not** an operational database — it's a fast analytical layer that queries Parquet snapshots. It runs in-process (no server needed) and provides 10-100x faster column-scan performance for investment screening queries.
+
+```python
+# Nightly export from PostgreSQL to Parquet
+# (run by Database Subagent)
+import duckdb
+
+conn = duckdb.connect()
+conn.execute("""
+    INSTALL postgres;
+    LOAD postgres;
+    ATTACH 'host=localhost dbname=aloha' AS pg (TYPE postgres);
+
+    -- Export parcels + liens + scores as Parquet snapshot
+    COPY (
+        SELECT p.*, l.principal_amount, l.total_owed, l.redemption_deadline,
+               s.overall_score, s.lien_to_value_ratio
+        FROM pg.parcels p
+        JOIN pg.tax_liens l USING (parcel_id)
+        LEFT JOIN pg.scores s USING (parcel_id)
+        WHERE l.lien_status = 'active'
+    ) TO '/data/snapshots/parcels_latest.parquet' (FORMAT PARQUET);
+""")
+```
+
+**Analytical queries served by DuckDB (examples):**
+```sql
+-- Top 50 opportunities by score in a county
+SELECT parcel_id, address, total_owed, lien_to_value_ratio, overall_score
+FROM read_parquet('/data/snapshots/parcels_latest.parquet')
+WHERE county = 'Orange' AND state = 'FL'
+ORDER BY overall_score DESC
+LIMIT 50;
+
+-- Redemption deadlines in next 60 days
+SELECT parcel_id, address, total_owed, redemption_deadline
+FROM read_parquet('/data/snapshots/parcels_latest.parquet')
+WHERE redemption_deadline BETWEEN current_date AND current_date + INTERVAL '60 days'
+ORDER BY redemption_deadline ASC;
+```
+
+### 9.5 MCP Servers to Build
+
+| Server | Purpose | Transport |
+|--------|---------|-----------|
+| `county-assessor-mcp` | Query county assessor APIs by parcel ID | stdio |
+| `sos-mcp` | Secretary of State business entity lookup | stdio |
+| `gis-mcp` | ArcGIS REST API wrapper for zoning/parcel lookup | stdio |
+| `court-records-mcp` | State court public record search | stdio |
+| `ucc-mcp` | UCC lien filing search | stdio |
+
+### 9.6 Database Schema (Full)
+
+```sql
+-- =============================================
+-- CORE PARCEL TABLE
+-- =============================================
+CREATE TABLE parcels (
+  parcel_id         TEXT PRIMARY KEY,    -- APN or county-assigned ID
+  county            TEXT NOT NULL,
+  state             TEXT NOT NULL,
+  address           TEXT,
+  legal_description TEXT,
+  acreage           DECIMAL,
+  land_use_code     TEXT,
+  property_type     TEXT,               -- residential, commercial, land, industrial, agricultural
+  zoning            TEXT,
+  zoning_notes      TEXT,
+  assessed_land_val INTEGER,
+  assessed_impr_val INTEGER,
+  assessed_total    INTEGER,
+  market_value_est  INTEGER,            -- from comps/Zillow
+  last_sale_date    DATE,
+  last_sale_price   INTEGER,
+  year_built        INTEGER,
+  -- Research pipeline state
+  research_status   TEXT DEFAULT 'discovered',  -- discovered|parcel_researched|owner_researched|enriched|scored|complete
+  data_freshness    TEXT DEFAULT 'fresh',        -- fresh|stale|expired
+  content_hash      TEXT,              -- MD5 of last crawl for change detection
+  last_crawled_at   TIMESTAMP,
+  created_at        TIMESTAMP DEFAULT NOW(),
+  updated_at        TIMESTAMP DEFAULT NOW()
+);
+
+-- =============================================
+-- TAX LIEN RECORDS
+-- =============================================
+CREATE TABLE tax_liens (
+  id                 SERIAL PRIMARY KEY,
+  parcel_id          TEXT REFERENCES parcels(parcel_id) ON DELETE CASCADE,
+  lien_status        TEXT DEFAULT 'active',  -- active|redeemed|auctioned|foreclosed|expired
+  tax_year           INTEGER,
+  years_delinquent   INTEGER,
+  principal_amount   DECIMAL NOT NULL,
+  interest_amount    DECIMAL,
+  penalty_amount     DECIMAL,
+  total_owed         DECIMAL,
+  filing_date        DATE,
+  redemption_deadline DATE,
+  auction_date        DATE,
+  certificate_number  TEXT,
+  lien_holder         TEXT DEFAULT 'county',
+  source_url          TEXT,
+  content_hash        TEXT,
+  retrieved_at        TIMESTAMP DEFAULT NOW(),
+  last_verified_at    TIMESTAMP,
+  UNIQUE(parcel_id, tax_year, certificate_number)
+);
+
+-- =============================================
+-- OWNER RECORDS (one per research attempt)
+-- =============================================
+CREATE TABLE owners (
+  id                   SERIAL PRIMARY KEY,
+  parcel_id            TEXT REFERENCES parcels(parcel_id) ON DELETE CASCADE,
+  owner_of_record      TEXT,            -- exactly as on deed
+  owner_type           TEXT,            -- individual|llc|trust|corporation|government|unknown
+  mailing_address      TEXT,
+  mailing_city         TEXT,
+  mailing_state        TEXT,
+  mailing_zip          TEXT,
+  is_absentee          BOOLEAN,         -- mailing address != property address
+  deed_type            TEXT,            -- warranty|quitclaim|trust|grant
+  acquisition_date     DATE,
+  acquisition_price    INTEGER,
+  -- Beneficial owner (pierced through entity)
+  beneficial_owner     TEXT,
+  beneficial_owner_confidence TEXT,     -- high|medium|low|unknown
+  -- Contact info (best found)
+  best_phone           TEXT,
+  best_email           TEXT,
+  best_contact_address TEXT,
+  -- Research metadata
+  research_depth       INTEGER DEFAULT 0,  -- layers completed (1-4)
+  sources              JSONB,
+  created_at           TIMESTAMP DEFAULT NOW(),
+  updated_at           TIMESTAMP DEFAULT NOW()
+);
+
+-- =============================================
+-- ENTITY RESEARCH (for LLC/trust/corp owners)
+-- =============================================
+CREATE TABLE entities (
+  id                  SERIAL PRIMARY KEY,
+  entity_name         TEXT NOT NULL,
+  entity_type         TEXT,             -- llc|corporation|trust|partnership|nonprofit
+  state_of_formation  TEXT,
+  sos_status          TEXT,             -- active|dissolved|revoked|suspended
+  formation_date      DATE,
+  registered_agent    TEXT,
+  registered_agent_address TEXT,
+  officers            JSONB,            -- array of {name, title}
+  managers_members    JSONB,
+  sos_filing_url      TEXT,
+  -- Related entities (same manager/address)
+  related_entity_ids  INTEGER[],
+  -- Financials
+  ucc_filings         JSONB,
+  federal_tax_liens   JSONB,
+  state_tax_liens     JSONB,
+  bankruptcy_history  JSONB,
+  -- Litigation
+  litigation_summary  TEXT,
+  pacer_results       JSONB,
+  -- Contact
+  website             TEXT,
+  phone               TEXT,
+  email               TEXT,
+  -- Meta
+  content_hash        TEXT,
+  last_researched_at  TIMESTAMP,
+  created_at          TIMESTAMP DEFAULT NOW(),
+  UNIQUE(entity_name, state_of_formation)
+);
+
+-- Link entity to owner record
+CREATE TABLE owner_entities (
+  owner_id   INTEGER REFERENCES owners(id),
+  entity_id  INTEGER REFERENCES entities(id),
+  PRIMARY KEY (owner_id, entity_id)
+);
+
+-- =============================================
+-- OPPORTUNITY SCORES
+-- =============================================
+CREATE TABLE scores (
+  id                   SERIAL PRIMARY KEY,
+  parcel_id            TEXT REFERENCES parcels(parcel_id),
+  overall_score        INTEGER,          -- 0-100
+  lien_to_value_ratio  DECIMAL,          -- lien / market value
+  years_delinquent     INTEGER,
+  owner_motivation     INTEGER,          -- 0-10 (absentee, multiple liens, entity dissolved = higher)
+  property_potential   INTEGER,          -- 0-10 (zoning, location, development)
+  contact_reachability INTEGER,          -- 0-10 (high = found direct contact)
+  risk_flags           TEXT[],           -- environmental, title, flood, litigation, etc.
+  flags_detail         JSONB,
+  score_rationale      TEXT,
+  scored_at            TIMESTAMP DEFAULT NOW()
+);
+
+-- =============================================
+-- RESEARCH QUEUE (fluid pipeline)
+-- =============================================
+CREATE TABLE research_queue (
+  id            SERIAL PRIMARY KEY,
+  parcel_id     TEXT NOT NULL,
+  stage         TEXT NOT NULL,           -- discover|parcel|owner|entity|contact|enrich|score
+  priority      INTEGER DEFAULT 5,       -- 1=urgent, 10=low
+  status        TEXT DEFAULT 'pending',  -- pending|in_progress|done|failed|retry|skipped
+  attempts      INTEGER DEFAULT 0,
+  last_error    TEXT,
+  next_retry_at TIMESTAMP,
+  claimed_by    TEXT,                    -- agent instance ID
+  claimed_at    TIMESTAMP,
+  created_at    TIMESTAMP DEFAULT NOW(),
+  updated_at    TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX idx_queue_pickup ON research_queue(status, priority, next_retry_at)
+  WHERE status IN ('pending', 'retry');
+
+-- =============================================
+-- CRAWL LOG (audit trail + change detection)
+-- =============================================
+CREATE TABLE crawl_log (
+  id            SERIAL PRIMARY KEY,
+  parcel_id     TEXT,
+  source_type   TEXT,           -- tax_collector|assessor|recorder|sos|gis|court|social
+  source_url    TEXT,
+  http_status   INTEGER,
+  content_hash  TEXT,
+  changed       BOOLEAN,        -- true if hash differs from previous crawl
+  error_message TEXT,
+  crawled_at    TIMESTAMP DEFAULT NOW()
+);
+
+-- =============================================
+-- VECTOR STORE FOR RAG
+-- =============================================
+CREATE TABLE document_chunks (
+  id          SERIAL PRIMARY KEY,
+  parcel_id   TEXT,
+  entity_id   INTEGER,
+  source_type TEXT,
+  source_url  TEXT,
+  content     TEXT,
+  embedding   vector(1536),
+  created_at  TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX idx_chunks_parcel ON document_chunks(parcel_id);
+CREATE INDEX idx_chunks_embedding ON document_chunks USING hnsw (embedding vector_cosine_ops);
+
+-- =============================================
+-- ALERTS (deadline tracking)
+-- =============================================
+CREATE TABLE alerts (
+  id           SERIAL PRIMARY KEY,
+  parcel_id    TEXT REFERENCES parcels(parcel_id),
+  alert_type   TEXT,   -- redemption_deadline|auction_date|lien_status_change|new_high_score
+  alert_date   DATE,
+  message      TEXT,
+  sent         BOOLEAN DEFAULT FALSE,
+  created_at   TIMESTAMP DEFAULT NOW()
+);
+```
+
+---
+
+## 10. Security & Legal Considerations
+
+### 10.1 Legal Framework
+- **Public records doctrine** — Government tax/assessor/recorder data is public record in all US states
+- **robots.txt compliance** — Agent must respect crawl restrictions on government sites
+- **Rate limiting** — Must throttle requests to avoid overwhelming government servers (DoS risk)
+- **Terms of service** — Social media scraping may violate platform ToS (LinkedIn, Facebook)
+- **CCPA/state privacy laws** — Aggregating personal data creates compliance obligations
+- **DPPA (Driver's Privacy Protection Act)** — DMV records off-limits without permissible purpose
+- **FCRA (Fair Credit Reporting Act)** — If used for credit/tenant screening, FCRA compliance required
+
+### 10.2 Permissible Use
+This agent is designed for:
+- Investment research (permissible — public records)
+- Due diligence (permissible — public records)
+- Property research (permissible — public records)
+
+This agent is **NOT** designed for:
+- Harassment or stalking of property owners
+- Consumer credit/background screening (FCRA territory)
+- Any purpose prohibited by applicable state law
+
+### 10.3 Data Storage
+- No storage of SSNs, driver's license numbers, or financial account numbers
+- Social media findings stored as summaries, not raw scraped profiles
+- Data retention policy: TBD (see `toresearch.md`)
+- Access control: TBD
+
+### 10.4 Technical Safety
+- User-agent string identifies the agent honestly
+- Delay between requests: 2-5 seconds minimum
+- Max concurrent requests per domain: 2
+- Automatic backoff on 429/503 responses
+- No credential stuffing or authentication bypass
+
+---
+
+## 11. Open Questions
+
+See `toresearch.md` for full list. Key blockers:
+- [ ] Geographic scope (single county vs. multi-state)
+- [ ] Primary use case (investing vs. due diligence vs. other)
+- [ ] Output format preferences
+- [ ] Budget for paid data sources
+- [ ] Social media research boundaries (legal comfort level)
+- [ ] Monitoring vs. one-time search mode
