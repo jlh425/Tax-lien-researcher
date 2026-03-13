@@ -1,7 +1,7 @@
 # Product Requirements Document: Aloha — Tax Lien Research Agent
-**Version:** 0.3
+**Version:** 0.4
 **Date:** 2026-03-13
-**Status:** ACTIVE DEVELOPMENT — core scope confirmed, database architecture finalized
+**Status:** ACTIVE DEVELOPMENT — scope expanded to cover both tax liens and tax deeds
 
 ---
 
@@ -22,43 +22,70 @@
 
 ## 1. Executive Summary
 
-The **Tax Lien Research Agent** is a multi-stage AI agent that autonomously discovers tax liens on land parcels, researches the property and its owner(s), and delivers a structured intelligence report for each lien found.
+**Aloha** is a multi-stage AI agent that autonomously discovers **tax liens and tax deeds** on land parcels across the United States, researches each property and its owner(s), and delivers a structured investment intelligence report.
+
+Aloha covers both primary tax-delinquency instruments:
+- **Tax Lien Certificates** — government sells the right to collect the debt at auction; investor earns interest during a redemption window and can foreclose if unpaid *(FL, AZ, NJ, CO, IL, IA, and others)*
+- **Tax Deeds** — government forecloses and sells the actual property deed at auction after the lien goes unpaid *(TX, GA, MI, MO, MN, WA, OR, and others)*
+- **Hybrid states** — some states use both mechanisms depending on the county or circumstance
 
 The agent combines:
-- **RAG over government websites** — county tax assessor, treasurer, and recorder sites to find active tax liens and parcel data
-- **Owner research** — public records, Secretary of State filings, social media, and property deed history to identify who owns each parcel
+- **RAG over government websites** — county tax collector, treasurer, assessor, and recorder sites to find active liens and scheduled deed auctions
+- **Owner research** — public records, Secretary of State filings, social media, and deed history to identify who owns each parcel
 - **Zoning & land use research** — municipal planning and zoning databases
 - **Business entity research** — when a parcel is owned by an LLC, trust, or corporation
-- **Priority scoring** — rank liens by investment potential or research relevance
+- **Instrument-aware scoring** — separate scoring models for lien certificates vs. deed opportunities
 
-> **⚠️ NOTE:** Geographic scope, primary use case, output format, and monitoring cadence are pending user input. See `toresearch.md`.
+> **⚠️ NOTE:** Geographic scope, social media research boundaries, and budget for paid data sources are pending user input. See `toresearch.md`.
 
 ---
 
 ## 2. Use Cases & Goals
 
-### 2.1 Primary Use Case: Tax Lien Investment Research
-The agent's primary purpose is **investment due diligence** — providing deep, actionable intelligence to evaluate whether a tax lien is worth pursuing as an investment. This means:
-- Finding liens before they go to auction or expire
-- Understanding the true value of the underlying property
-- Identifying the real owner(s) so outreach or negotiation is possible
-- Assessing risk (environmental, title, zoning, litigation)
-- Scoring opportunities so the best ones surface first
+### 2.1 Primary Use Case: Tax Delinquency Investment Research
+
+The agent's primary purpose is **investment due diligence** — providing deep, actionable intelligence to evaluate both types of tax delinquency opportunities:
+
+#### Tax Lien Certificate Investing
+- Find lien certificates before or at auction
+- Evaluate interest rate earned + redemption likelihood
+- Assess lien-to-value ratio (safety margin if forced to foreclose)
+- Identify owner motivation: are they likely to redeem or walk away?
+- Owner reachability is critical — direct outreach can prompt redemption or negotiated purchase
+- **Key metric:** Lien-to-value ratio, years delinquent, redemption deadline urgency
+
+#### Tax Deed Investing
+- Find properties scheduled for government deed auction (delinquency reached the foreclosure stage)
+- Evaluate property value vs. auction starting bid (the government's minimum)
+- Assess title risk — tax deed sales can convey title with clouds; title research is critical
+- Evaluate property condition (vacant land vs. structure — different rehab/resale thesis)
+- Owner research still valuable but secondary — the government is selling the deed, not the owner
+- **Key metric:** After Repair Value (ARV) vs. starting bid + estimated rehab + title risk
 
 **All property types included:** residential, commercial, vacant land, industrial, agricultural.
 
-**Geographic scope:** Configurable at runtime — target any US county/state. Start with a single county for validation, then generalize.
+**Geographic scope:** Configurable at runtime — target any US county/state. Instrument type (lien vs. deed) is auto-detected from state law and county data.
+
+#### US State Classification (built into Discovery Agent)
+
+| Instrument | Primary States |
+|-----------|---------------|
+| **Tax Lien Certificate** | FL, AZ, NJ, CO, IL, IA, IN, KY, MD, MS, MO (partial), NE, NY (partial), OH, SC, VT, WY |
+| **Tax Deed** | TX, GA, MI, MN, MO (partial), NY (partial), OR, WA, WI, CA, AR, TN, VA, NC |
+| **Hybrid** | Some counties within otherwise lien/deed states — Discovery Agent checks county-level |
 
 ### 2.2 Agent Goals
-1. **Discovery** — Find parcels with active tax liens in a target geographic area
-2. **Owner identification** — Determine the true beneficial owner (individual or entity) — as deep as possible
-3. **Lien valuation** — Capture lien amount, years delinquent, interest/penalties, redemption deadline
-4. **Property characterization** — Zoning, land use, acreage, assessed value, market value estimate
-5. **Entity piercing** — For LLC/trust owners: identify beneficial owner through SOS, deed chains, registered agents
-6. **Risk assessment** — Environmental flags, litigation, title issues, flood zone, liens from other creditors
-7. **Market context** — Comparable sales, neighborhood trends, development potential
-8. **Opportunity scoring** — Rank liens by investment merit (lien-to-value ratio, owner motivation, property potential)
-9. **Continuous monitoring** — Database maintained by subagent; stale records auto-refreshed on schedule
+1. **Discovery** — Find parcels with active tax liens OR scheduled deed auctions in a target geographic area
+2. **Instrument classification** — Determine whether the opportunity is a lien certificate or tax deed (drives scoring model)
+3. **Owner identification** — Determine the true beneficial owner (individual or entity) — as deep as possible
+4. **Lien/deed valuation** — Capture amount, years delinquent, redemption deadline (liens) or auction date + starting bid (deeds)
+5. **Property characterization** — Zoning, land use, acreage, assessed value, market value estimate, condition
+6. **Title chain research** — For tax deeds: full title chain review to identify clouds or competing claims
+7. **Entity piercing** — For LLC/trust owners: identify beneficial owner through SOS, deed chains, registered agents
+8. **Risk assessment** — Environmental flags, litigation, title issues, competing liens, condition risk
+9. **Market context** — Comparable sales, neighborhood trends, development potential
+10. **Instrument-aware scoring** — Lien model (LTV, interest rate, redemption likelihood) or deed model (ARV vs. bid, title clarity, condition)
+11. **Continuous monitoring** — Database maintained by subagent; stale records auto-refreshed on schedule
 
 ---
 
@@ -81,8 +108,14 @@ PARCEL RESEARCH STATES:
        ↓               ↓                 ↓                ↓          ↓
     failed_1       failed_2          failed_3         failed_4   failed_5
 
-LIEN STATES (separate from parcel):
-  active → redeemed | foreclosed | auctioned | expired
+INSTRUMENT TYPES (set at discovery, drives scoring model):
+  lien_certificate   → scoring: LTV ratio, interest rate, redemption likelihood, owner reachability
+  tax_deed           → scoring: ARV vs. starting bid, title clarity, condition risk
+  hybrid_pending     → instrument TBD until county data confirms
+
+LIEN/DEED STATUS (separate from parcel research state):
+  [Certificate] active → redeemed | sold_at_auction | foreclosed | expired
+  [Deed]        scheduled_auction → sold | withdrawn | postponed | no_bid
 
 DATABASE STATES (managed by Refresh Subagent):
   fresh (< 24h) → stale (24h-7d) → expired (> 7d) → needs_recrawl
@@ -163,32 +196,66 @@ DATABASE STATES (managed by Refresh Subagent):
 
 ## 4. Research Pipeline
 
-### 4.1 Stage 1: Lien Discovery
+### 4.1 Stage 1: Discovery (Liens & Deeds)
+
+The Discovery Agent identifies the target state's instrument type first, then queries the appropriate sources.
+
+#### 4.1a Tax Lien Certificate Discovery
 
 **Target sources (priority order):**
-1. County Tax Collector / Treasurer website (official)
-2. County Tax Assessor website (official)
-3. State-level tax delinquency lists (some states publish these)
-4. County Clerk / Recorder of Deeds (official)
-5. State tax authority (e.g., state revenue/taxation dept)
-6. Third-party aggregators (Zillow, Realtor.com) — lower priority
+1. County Tax Collector / Treasurer website — delinquent tax list
+2. State-level tax delinquency bulk download (FL, AZ, CO publish these)
+3. County Tax Assessor website
+4. State tax authority delinquency portal
+5. Socrata / county open data API (when available — preferred, zero crawl)
+6. Third-party aggregators (PropStream, ATTOM) — if API access available
 
-**Data to capture per lien:**
-- Parcel ID / APN (Assessor Parcel Number)
-- Property address (if available)
+**Data to capture per lien certificate:**
+- Parcel ID / APN
+- Property address
 - Legal description
 - Tax year(s) delinquent
-- Amount owed (principal)
-- Interest and penalties
+- Principal owed, interest, penalties, total owed
 - Lien filing date
-- Lien expiration / redemption deadline
-- Auction date (if scheduled)
-- Certificate number (if applicable)
+- Redemption deadline
+- Certificate number
+- Interest rate on certificate (varies by state — set at auction)
+- Auction date (if upcoming)
 
-**Crawl strategy:**
-- Use crawl4ai for structured government sites
-- Use agent-browser for JavaScript-heavy search portals
-- Cache results with TTL (24-48h) to avoid repeated crawls
+#### 4.1b Tax Deed Discovery
+
+**Target sources (priority order):**
+1. County Tax Collector / Treasurer — upcoming deed sale / auction list
+2. County Sheriff's sale list (some states use Sheriff's deeds)
+3. State comptroller / land office (TX uses this model)
+4. County Clerk / Recorder — lis pendens filings indicating pending tax foreclosure
+5. Socrata / county open data API (TX counties publish deed sale lists)
+
+**Data to capture per tax deed listing:**
+- Parcel ID / APN
+- Property address + legal description
+- Auction date and time
+- Auction location (courthouse steps, online platform)
+- Auction starting bid (minimum bid set by government)
+- Opening bid components: back taxes + interest + fees + costs
+- Online auction platform (many counties now use Realauction, Bid4Assets, GovEase)
+- Redemption period post-sale (some states allow post-sale redemption)
+- Any known title encumbrances noted by county
+
+**Online deed auction platforms to monitor:**
+| Platform | States/Counties |
+|----------|----------------|
+| Bid4Assets | TX, GA, WA, OR, and others |
+| Realauction | FL (deeds), NJ, and others |
+| GovEase | Multiple states |
+| SRI Tax | IN, IL, and others |
+| County-direct portals | TX county-by-county |
+
+**Crawl strategy (both instruments):**
+- Use Socrata / bulk API exports first (zero crawl, highest quality)
+- Use crawl4ai for structured government listing pages
+- Use agent-browser for JavaScript-heavy portals and online auction platforms
+- Cache results with TTL (24-48h)
 - Respect robots.txt; throttle requests (1-2 req/sec)
 
 ### 4.2 Stage 2: Parcel Research
@@ -199,7 +266,7 @@ DATABASE STATES (managed by Refresh Subagent):
 3. GIS/mapping portals (many counties have public ArcGIS)
 4. State GIS data portals
 
-**Data to capture:**
+**Data to capture (all instruments):**
 - Current owner name(s) of record
 - Mailing address of owner
 - Property legal description
@@ -210,6 +277,16 @@ DATABASE STATES (managed by Refresh Subagent):
 - Last sale date + price
 - Deed type (warranty, quitclaim, trust deed)
 - Mortgage / deed of trust filings
+
+**Additional data for Tax Deed opportunities:**
+- Full title chain (every deed transfer on record — critical for tax deed title risk assessment)
+- Any IRS federal tax liens (survive tax deed sale in some states — must check)
+- HOA liens (survive or not depending on state — must check)
+- Mechanics liens, judgment liens (senior/junior priority relative to tax deed)
+- Lis pendens filings (competing foreclosure actions)
+- Code enforcement violations, demolition orders
+- Estimated condition (vacant/occupied, structure visible in Street View)
+- Prior tax deed sales on same parcel (title already has clouds?)
 
 ### 4.3 Stage 3: Deep Owner Research
 
@@ -315,13 +392,13 @@ Every owner research result gets a confidence score:
 **Zoning research:**
 - Municipal/county zoning maps (GIS)
 - Zoning classification (residential, commercial, agricultural, industrial)
-- Overlay districts (flood zone, historic, etc.)
+- Overlay districts (historic, etc.)
 - Development potential / permitted uses
 - Recent variance or permit activity
 
 **Market context:**
 - Comparable sales (Zillow, county assessor)
-- Estimated market value
+- Estimated market value / ARV
 - Days on market for similar properties
 - Neighborhood trend (appreciating/depreciating)
 
@@ -331,6 +408,47 @@ Every owner research result gets a confidence score:
 - Business mentions (if entity owner)
 - Environmental issues / EPA records
 
+### 4.5 Stage 5: Instrument-Aware Scoring
+
+The Scoring Agent uses different models depending on `instrument_type`.
+
+#### Lien Certificate Scoring Model
+
+| Factor | Weight | Notes |
+|--------|--------|-------|
+| Lien-to-value ratio | High | Lower % = more collateral protection |
+| Years delinquent | Medium | More years = owner more likely disengaged |
+| Interest rate on certificate | High | Varies by state; AZ up to 16%, FL up to 18% |
+| Redemption deadline urgency | High | Closer deadline = time pressure on owner |
+| Owner motivation score | High | Absentee + LLC + multiple liens = motivated seller |
+| Contact reachability | Medium | High confidence contact = can negotiate |
+| Property type | Medium | Vacant land = simpler foreclosure if unredeemed |
+| Title encumbrances | Medium | Competing senior liens reduce net recovery |
+
+**Scoring output:** 0-100 composite score + `lien_certificate` rationale string.
+
+#### Tax Deed Scoring Model
+
+| Factor | Weight | Notes |
+|--------|--------|-------|
+| ARV vs. opening bid | Very High | Spread = potential profit margin |
+| Opening bid / assessed value | High | Government minimums often < market |
+| Title clarity | Very High | IRS liens, HOA liens, lis pendens all reduce score |
+| Property condition | High | Vacant/structure, estimated rehab need |
+| Competing bidder likelihood | Medium | High-value visible properties attract competition |
+| Post-sale redemption risk | Medium | Some states allow 1-3 year post-sale redemption |
+| Zoning / development potential | Medium | Upside beyond current use |
+| Online vs. in-person auction | Low | Online = broader competition; in-person = local only |
+
+**Scoring output:** 0-100 composite score + `tax_deed` rationale string.
+
+#### Score Display in UI
+
+```
+[LIEN CERT]  Score: 72/100  •  LTV: 4.6%  •  Rate: 18%  •  Deadline: 9mo
+[TAX DEED ]  Score: 85/100  •  ARV: $310K  •  Bid: $42K  •  Title: Clear
+```
+
 ---
 
 ## 5. Data Sources
@@ -339,16 +457,20 @@ Every owner research result gets a confidence score:
 
 | Source Type | Access Method | Data Available |
 |-------------|---------------|----------------|
-| County Tax Collector/Treasurer | Web crawl + some have APIs | Active liens, delinquency lists, auction schedules |
+| County Tax Collector/Treasurer | Web crawl + some have APIs | Active liens, delinquency lists, deed auction schedules |
 | County Assessor | Web crawl + ArcGIS REST APIs | Parcel data, ownership, assessed value |
-| County Recorder/Clerk | Web crawl | Deed history, mortgage filings |
+| County Recorder/Clerk | Web crawl | Deed history, title chain, mortgage filings |
 | State Revenue/Tax Dept | Web crawl | State tax liens (separate from property tax) |
 | Secretary of State | Web crawl + some APIs | Entity registration, officers, registered agent |
 | State UCC Filing Office | Web crawl | Secured party liens on personal property |
 | County GIS Portal | ArcGIS REST API | Parcel boundaries, zoning, land use |
 | Municipal Planning Dept | Web crawl | Zoning codes, permits, variances |
-| PACER (Federal Courts) | API ($0.10/page) | Federal litigation |
-| State Court Portals | Web crawl | Civil/criminal filings |
+| PACER (Federal Courts) | API ($0.10/page) | Federal tax liens (IRS), federal litigation |
+| State Court Portals | Web crawl | Civil/criminal filings, lis pendens |
+| **Bid4Assets** | Web crawl + API | Tax deed auction listings (TX, GA, WA, OR) |
+| **Realauction** | Web crawl | Tax deed/lien auctions (FL deeds, NJ, others) |
+| **GovEase** | Web crawl | Tax deed auction listings (multiple states) |
+| **SRI Tax** | Web crawl | Tax lien/deed auctions (IN, IL, and others) |
 
 ### 5.2 Semi-Official / Aggregator Sources
 
@@ -980,7 +1102,13 @@ CREATE TABLE parcels (
 CREATE TABLE tax_liens (
   id                 SERIAL PRIMARY KEY,
   parcel_id          TEXT REFERENCES parcels(parcel_id) ON DELETE CASCADE,
-  lien_status        TEXT DEFAULT 'active',  -- active|redeemed|auctioned|foreclosed|expired
+  -- Instrument classification (drives scoring model)
+  instrument_type    TEXT NOT NULL DEFAULT 'lien_certificate',
+                     -- lien_certificate | tax_deed | hybrid_pending
+  -- Shared fields
+  lien_status        TEXT DEFAULT 'active',
+                     -- [cert] active|redeemed|sold_at_auction|foreclosed|expired
+                     -- [deed] scheduled_auction|sold|withdrawn|postponed|no_bid
   tax_year           INTEGER,
   years_delinquent   INTEGER,
   principal_amount   DECIMAL NOT NULL,
@@ -988,10 +1116,21 @@ CREATE TABLE tax_liens (
   penalty_amount     DECIMAL,
   total_owed         DECIMAL,
   filing_date        DATE,
+  -- Lien Certificate specific
   redemption_deadline DATE,
-  auction_date        DATE,
   certificate_number  TEXT,
-  lien_holder         TEXT DEFAULT 'county',
+  certificate_interest_rate DECIMAL,        -- interest rate earned on the certificate (e.g. 0.18 for 18%)
+  lien_holder         TEXT DEFAULT 'county',-- 'county' until sold at auction, then investor name
+  -- Tax Deed specific
+  auction_date        DATE,
+  auction_time        TEXT,                 -- e.g. '10:00 AM ET'
+  auction_platform    TEXT,                 -- courthouse_steps|bid4assets|realauction|govease|sri|county_online
+  auction_url         TEXT,                 -- direct URL to the auction listing
+  opening_bid         DECIMAL,              -- government's minimum starting bid
+  post_sale_redemption_days INTEGER,        -- days owner has to redeem after deed sale (0 if none)
+  title_encumbrances  JSONB,               -- IRS liens, HOA, mechanics, lis pendens found in title search
+  title_risk_level    TEXT,                 -- clear|minor|significant|clouded
+  -- Source tracking
   source_url          TEXT,
   content_hash        TEXT,
   retrieved_at        TIMESTAMP DEFAULT NOW(),
@@ -1078,13 +1217,33 @@ CREATE TABLE owner_entities (
 CREATE TABLE scores (
   id                   SERIAL PRIMARY KEY,
   parcel_id            TEXT REFERENCES parcels(parcel_id),
-  overall_score        INTEGER,          -- 0-100
-  lien_to_value_ratio  DECIMAL,          -- lien / market value
+  instrument_type      TEXT,             -- lien_certificate | tax_deed
+  overall_score        INTEGER,          -- 0-100 (comparable across both instrument types)
+  score_model_version  TEXT,             -- e.g. 'lien_v1', 'deed_v1' (for reproducibility)
+
+  -- Shared scoring factors (0-10 each)
+  property_potential   INTEGER,          -- zoning, location, development upside
+  risk_score           INTEGER,          -- 0-10 where 10 = highest risk (inverted for display)
+
+  -- Lien Certificate factors (null for tax deed records)
+  lien_to_value_ratio  DECIMAL,          -- total_owed / market_value (e.g. 0.046 = 4.6%)
+  certificate_rate     DECIMAL,          -- interest rate on certificate (e.g. 0.18)
   years_delinquent     INTEGER,
-  owner_motivation     INTEGER,          -- 0-10 (absentee, multiple liens, entity dissolved = higher)
-  property_potential   INTEGER,          -- 0-10 (zoning, location, development)
-  contact_reachability INTEGER,          -- 0-10 (high = found direct contact)
-  risk_flags           TEXT[],           -- environmental, title, flood, litigation, etc.
+  owner_motivation     INTEGER,          -- 0-10 (absentee, LLC, dissolved, multiple liens)
+  contact_reachability INTEGER,          -- 0-10 (high = found direct contact info)
+  redemption_urgency   INTEGER,          -- 0-10 (10 = deadline < 30 days)
+
+  -- Tax Deed factors (null for lien certificate records)
+  arv_estimate         DECIMAL,          -- After Repair Value estimate
+  opening_bid          DECIMAL,          -- government starting bid
+  arv_to_bid_ratio     DECIMAL,          -- arv / opening_bid (e.g. 7.4 = 7.4x spread)
+  title_clarity        INTEGER,          -- 0-10 (10 = perfectly clear title)
+  condition_risk       INTEGER,          -- 0-10 (10 = known demolition order / severe issues)
+  competition_risk     INTEGER,          -- 0-10 (10 = high-profile property, many bidders likely)
+  post_sale_redemption_risk INTEGER,     -- 0-10 (10 = long redemption period post-sale)
+
+  -- Common output
+  risk_flags           TEXT[],           -- environmental, title_cloud, irs_lien, lis_pendens, hoa_lien, etc.
   flags_detail         JSONB,
   score_rationale      TEXT,
   scored_at            TIMESTAMP DEFAULT NOW()
