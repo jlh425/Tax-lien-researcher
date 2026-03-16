@@ -1,7 +1,7 @@
 # Tax Lien Researcher — Open Questions & Research Tasks
 **Created:** 2026-03-13
 **Updated:** 2026-03-16
-**Status:** ACTIVE — Section A (user decisions) COMPLETE. Section B (technical research) COMPLETE (all items including B.6.4 COMPLETE as of 2026-03-16). Section C (API evaluation) updated with pricing and new APIs. D (data source mapping) and E (competitive research) remain open.
+**Status:** ALL RESEARCH COMPLETE as of 2026-03-16. Sections A–E done. Ready to begin Phase 1 implementation.
 
 ---
 
@@ -478,11 +478,38 @@ These are things to investigate before or during implementation — not dependen
 
 ## SECTION E: Competitive Research
 
-- [ ] **E.1** How do existing tools handle this? (PropStream, ATTOM, RealtyTrac)
-- [ ] **E.2** What do tax lien investors currently do manually that this agent automates?
-- [ ] **E.3** Are there existing open-source tax lien scrapers to build on?
-  - Check GitHub for county-specific scrapers
-  - Check PyPI for property research libraries
+**Status:** COMPLETE — see `research/E-competitive-research.md`
+
+- [x] **E.1** How do existing tools handle this? (PropStream, ATTOM, RealtyTrac)
+  - **PropStream ($99/mo):** Property data + basic tax lien filter. Stale batch data, no instrument classification, no entity piercing, no scoring, no imagery. Most popular retail tool.
+  - **BatchLeads ($119-299/mo):** List building + SMS campaigns. BatchRank AI scores likelihood-to-sell (not lien investment merit). Not specialized for tax liens.
+  - **DealMachine ($49-199/mo):** Mobile driving-for-dollars. Tax delinquency filter but not specialized. CRM + mail only.
+  - **ATTOM (enterprise):** Raw data API — 158M properties. Data infrastructure supplier to tools like PropStream. Not consumer-facing. Potential paid data source for Aloha.
+  - **Tax Sale Resources:** Most specialized tax lien tool. Live auction schedules, research, portfolio management, secondary market trading. No AI, no deep owner research, no imagery, no scoring model.
+  - **Lumentum/DigiPan:** Institutional only. Portfolio management for hedge funds / banks.
+  - **Key finding:** No existing tool combines discovery + deep owner research + imagery + AI scoring + outreach in a single tax-lien-specific workflow.
+
+- [x] **E.2** What do tax lien investors currently do manually that Aloha automates?
+  - **County list collection:** 1-3 hrs/county → Aloha: ~5 min automated
+  - **Per-property research:** 15-45 min/property → Aloha: ~2 min automated
+  - **Individual owner research:** 30-60 min/property → Aloha: ~5 min automated
+  - **LLC/entity research:** 1-4 hrs/property (often abandoned) → Aloha: ~15 min automated
+  - **Scoring/ranking 50 properties:** 1-2 hrs in Excel → Aloha: ~30 sec automated
+  - **Outreach writing/sending:** 30-120 min/batch → Aloha: ~5 min (template + approve)
+  - **Total for 50 properties: 40-120+ hours manually → ~2-3 hours with Aloha (review + approve)**
+
+- [x] **E.3** Are there existing open-source tax lien scrapers to build on?
+  - **No multi-state tax lien scraper exists.** Aloha is greenfield.
+  - Single-county scrapers exist: `codefornola/assessor-scraper` (New Orleans), `ottinger/ok-assessor-scraper` (OK County), `tedbeck/web-scraper` (newspaper notices)
+  - **`homeharvest`** (PyPI, active): Zillow/Redfin listing scraper — useful for Zillow imagery layer
+  - No tax-lien-specific PyPI package exists — Aloha will be the first
+  - Useful PyPI libraries already identified: `usaddress`, `rapidfuzz`, `docling`, `playwright`, `pydantic-ai`, `apscheduler`
+
+- [x] **E.4** (added) Pricing benchmarks — Aloha tiers positioned vs. competition:
+  - Free: 50 properties/mo (below all competitors)
+  - Starter $49/mo: 500 properties/mo + email outreach (below PropStream, more focused)
+  - Professional $99/mo: 5,000 + entity piercing + SMS (matches PropStream price, far more capability)
+  - Enterprise $249/mo: unlimited + AI voice + teams (above all retail tools, below enterprise)
 
 ---
 
