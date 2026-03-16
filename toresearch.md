@@ -1,7 +1,7 @@
 # Tax Lien Researcher — Open Questions & Research Tasks
 **Created:** 2026-03-13
-**Updated:** 2026-03-15
-**Status:** ACTIVE — Section A (user decisions) COMPLETE. Section B (technical research) COMPLETE (B.6.4 remains open — no research agent assigned; B.6.2 COMPLETE as of 2026-03-16). Section C (API evaluation) updated with pricing and new APIs. D (data source mapping) and E (competitive research) remain open.
+**Updated:** 2026-03-16
+**Status:** ACTIVE — Section A (user decisions) COMPLETE. Section B (technical research) COMPLETE (all items including B.6.4 COMPLETE as of 2026-03-16). Section C (API evaluation) updated with pricing and new APIs. D (data source mapping) and E (competitive research) remain open.
 
 ---
 
@@ -396,10 +396,14 @@ These are things to investigate before or during implementation — not dependen
     3. Structural field hash (status|paid_date|auction_date|amount) for key fields only
   - TTLs: lien status = weekly re-verify; parcel data = 7-day stale threshold; lien discovery = 24h
 
-- [ ] **B.6.4** Handling PDFs:
-  - Many county recorders serve deed images as PDFs (scanned)
-  - Need PDF OCR pipeline (docling, pytesseract, or Azure Document Intelligence)
-  - Research: how common are scanned vs. native PDF deeds in target counties?
+- [x] **B.6.4** Handling PDFs:
+  - **Research complete:** See `research/B.6.4-pdf-ocr-pipeline.md`
+  - **Key finding:** County recorders serve documents primarily as scanned image PDFs (300 DPI, B&W TIFF-origin). Newer eRecordings (~90% of US population covered) are native digital, but historical backfile remains scanned. Even "native" PDFs become hybrid after recorder stamps are added as image overlays.
+  - **OCR stack:** marker (by Vik Paruchuri, uses surya internally) for PDF-to-markdown conversion — 97%+ accuracy on typed text, 25 pages/sec on H100 batch mode. Falls back to Azure Document Intelligence for handwriting and PaddleOCR-VL for plat maps.
+  - **Extraction:** Claude Sonnet 4 API for structured field extraction from OCR'd markdown (grantor, grantee, legal description, recording date, APN, consideration). 95-99% field accuracy on clean OCR text.
+  - **Pipeline:** PyMuPDF detects native vs. scanned → native path (direct text extraction) or scanned path (OpenCV preprocessing → marker OCR → Claude extraction) → confidence scoring → auto-accept (>=0.90) or human review queue (<0.70)
+  - **Cost at scale:** Self-hosted marker on GPU is 167x cheaper than cloud APIs. 100K docs/month estimated at $500-1,200/month total (OCR + Claude extraction + storage).
+  - **Commercial alternatives:** Affinda (>99% accuracy on deeds) and V7 Go (deed analysis agent, trained on county recorder scans) exist but are expensive; open-source stack is strongly preferred for SaaS cost structure.
 
 ### B.7 Scoring & Prioritization
 
