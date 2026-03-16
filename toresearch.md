@@ -399,7 +399,7 @@ These are things to investigate before or during implementation — not dependen
 - [x] **B.6.4** Handling PDFs:
   - **Research complete:** See `research/B.6.4-pdf-ocr-pipeline.md`
   - **Key finding:** County recorders serve documents primarily as scanned image PDFs (300 DPI, B&W TIFF-origin). Newer eRecordings (~90% of US population covered) are native digital, but historical backfile remains scanned. Even "native" PDFs become hybrid after recorder stamps are added as image overlays.
-  - **OCR stack:** marker (by Vik Paruchuri, uses surya internally) for PDF-to-markdown conversion — 97%+ accuracy on typed text, 25 pages/sec on H100 batch mode. Falls back to Azure Document Intelligence for handwriting and PaddleOCR-VL for plat maps.
+  - **OCR stack:** Docling (IBM, open-source MIT license) as primary — layout analysis + table extraction + OCR with 97.9% cell accuracy. marker/surya as secondary for PDF→markdown. Azure Document Intelligence as cloud fallback for handwriting (99%+ accuracy).
   - **Extraction:** Claude Sonnet 4 API for structured field extraction from OCR'd markdown (grantor, grantee, legal description, recording date, APN, consideration). 95-99% field accuracy on clean OCR text.
   - **Pipeline:** PyMuPDF detects native vs. scanned → native path (direct text extraction) or scanned path (OpenCV preprocessing → marker OCR → Claude extraction) → confidence scoring → auto-accept (>=0.90) or human review queue (<0.70)
   - **Cost at scale:** Self-hosted marker on GPU is 167x cheaper than cloud APIs. 100K docs/month estimated at $500-1,200/month total (OCR + Claude extraction + storage).
@@ -453,6 +453,9 @@ These are things to investigate before or during implementation — not dependen
 | **usaddress** | **Address parsing (offline)** | **Free (open-source)** | **`pip install usaddress` v0.5.16. CRF-based parser. Parse only, no validation** |
 | **RapidFuzz** | **Fuzzy string matching** | **Free (MIT license)** | **`pip install rapidfuzz` v3.14.3. 2x faster than thefuzz. Commercial-safe** |
 | **TaxNetUSA** | **Assessor + delinquent tax data API** | **Commercial (contact sales)** | **300+ counties in TX/FL. Web API for property tax data** |
+| **Docling** | **PDF OCR + layout analysis + table extraction** | **Free (MIT open-source)** | **IBM. `pip install docling`. 97.9% table cell accuracy. Primary OCR tool** |
+| **marker** | **PDF → Markdown conversion (uses surya)** | **Free (open-source)** | **97%+ typed text accuracy, 25 pg/sec GPU. Secondary OCR behind Docling** |
+| **PyMuPDF** | **PDF classification + native text extraction** | **Free (AGPL / commercial)** | **Detects native vs scanned. 0.01 sec/page for native text extraction** |
 
 ---
 

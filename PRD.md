@@ -1017,6 +1017,13 @@ Scheduler:        APScheduler (Python) for database subagent cron jobs
 Connection Pool:  Phase 3: PgBouncer (added at 100K+ parcels for connection scaling)
 PDF Export:       WeasyPrint (Python, HTML→PDF with embedded images)
 
+--- Document Processing / OCR ---
+PDF Classification: PyMuPDF (detect native vs scanned, fast text extraction from native PDFs)
+OCR (primary):      Docling (IBM, open-source, MIT license — layout analysis + table extraction + OCR)
+OCR (fallback):     marker + surya (PDF→Markdown, 97%+ accuracy on typed text)
+Handwriting OCR:    Azure Document Intelligence (99%+ accuracy, cloud fallback only)
+Field Extraction:   Claude Sonnet (structured deed field extraction from OCR text)
+
 --- Imagery APIs ---
 GIS Parcel Maps:  County ArcGIS REST exportImage endpoint (primary)
                   Playwright screenshot of county GIS viewer (fallback)
