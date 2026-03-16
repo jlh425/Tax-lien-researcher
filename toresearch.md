@@ -1,7 +1,7 @@
 # Tax Lien Researcher — Open Questions & Research Tasks
 **Created:** 2026-03-13
 **Updated:** 2026-03-15
-**Status:** ACTIVE — Section A (user decisions) COMPLETE. Section B (technical research) COMPLETE (B.6.2 and B.6.4 remain open — no research agents assigned). Section C (API evaluation) updated with pricing and new APIs. D (data source mapping) and E (competitive research) remain open.
+**Status:** ACTIVE — Section A (user decisions) COMPLETE. Section B (technical research) COMPLETE (B.6.4 remains open — no research agent assigned; B.6.2 COMPLETE as of 2026-03-16). Section C (API evaluation) updated with pricing and new APIs. D (data source mapping) and E (competitive research) remain open.
 
 ---
 
@@ -380,10 +380,14 @@ These are things to investigate before or during implementation — not dependen
 - [x] **B.6.1** Should we use a knowledge base (crawl-then-query) or live query approach?
   - **Decision:** Hybrid. Live crawl for specific parcel/lien data (always fresh). PostgreSQL+pgvector KB for zoning rules, SOS filings, entity research (crawled, indexed, cached with TTL). DuckDB Parquet snapshots for fast analytics queries across full dataset.
 
-- [ ] **B.6.2** How to handle dynamic government portals (React/Angular search UIs)?
-  - Many county portals are JavaScript-heavy search interfaces
-  - agent-browser needed for form-fill → results extraction
-  - Research: target counties' portal tech stack
+- [x] **B.6.2** How to handle dynamic government portals (React/Angular search UIs)?
+  - **Research complete:** See `research/B.6.2-dynamic-government-portals.md`
+  - **Key finding:** ~80-85% of county portals are traditional server-rendered (ASP.NET + jQuery), NOT modern SPAs. Only ~10-15% use React/Angular/Vue.
+  - **Architecture:** Three-tier system: (1) API/bulk feeds for ~15-20% of counties, (2) vendor-template Playwright scrapers for ~50-60% (Tyler, qPublic, Aumentum, Vision), (3) AI-adaptive browser agents (browser-use/Stagehand + Claude) for remaining ~20-30%
+  - **Tool:** Playwright (Python) via Crawlee framework, with browser-use for AI-adaptive Tier 3
+  - **Vendor coverage:** Tyler Technologies (~2,000 jurisdictions) + qPublic (~400) + Vision (~400) + Aumentum (~200) + Esri REST API (~1,000) covers ~60-70% of all US counties with template scrapers
+  - **CAPTCHA:** ~60-70% of portals have no CAPTCHA; stealth mode handles most reCAPTCHA v3; 2Captcha API fallback ($2.99/1K solves)
+  - **Cost:** ~$600-1,700/month at full scale (3,100+ counties, weekly refresh)
 
 - [x] **B.6.3** Document freshness strategy:
   - **Decision:** 3-layer approach (see PRD §9.3):
