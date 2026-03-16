@@ -1,7 +1,7 @@
 # Product Requirements Document: Aloha — Tax Lien Research Agent
-**Version:** 0.4
-**Date:** 2026-03-13
-**Status:** ACTIVE DEVELOPMENT — scope expanded to cover both tax liens and tax deeds
+**Version:** 0.6
+**Date:** 2026-03-15
+**Status:** ACTIVE DEVELOPMENT — SaaS platform with tiered subscriptions, multi-state coverage
 
 ---
 
@@ -16,27 +16,53 @@
 8. [Output & Reporting](#8-output--reporting)
 9. [Tech Stack](#9-tech-stack)
 10. [Security & Legal Considerations](#10-security--legal-considerations)
-11. [Open Questions](#11-open-questions)
+11. [Subscription Tiers & User Management](#11-subscription-tiers--user-management)
+12. [Version Roadmap (V1 / V2)](#12-version-roadmap-v1--v2)
+13. [Open Questions](#13-open-questions)
 
 ---
 
 ## 1. Executive Summary
 
-**Aloha** is a multi-stage AI agent that autonomously discovers **tax liens and tax deeds** on land parcels across the United States, researches each property and its owner(s), and delivers a structured investment intelligence report.
+**Aloha** is a **multi-tier SaaS platform** powered by AI agents that autonomously discovers **tax liens and tax deeds** on land parcels across all US states, performs deep property and owner research, scores investment opportunities, and enables direct owner outreach — all from a web-based interface.
+
+### Product Model
+
+Aloha is a **subscription-based SaaS product** with tiered access. Users log in, select a target geography (any US county/state), and the agent begins discovery and research. Features, research depth, run modes, and outreach capabilities scale with subscription tier. See [Section 11](#11-subscription-tiers--user-management) for full tier breakdown.
+
+### Version Roadmap
+
+| Version | Scope |
+|---------|-------|
+| **V1** | Full discovery pipeline (liens + deeds, all states) + deep research + scoring + guided walkthrough of pre-auction offers and auction process + owner outreach (email, SMS, phone) |
+| **V2** | Agent autonomously makes and conducts pre-auction offers and auction bids on behalf of the user |
+
+### Instrument Coverage
 
 Aloha covers both primary tax-delinquency instruments:
 - **Tax Lien Certificates** — government sells the right to collect the debt at auction; investor earns interest during a redemption window and can foreclose if unpaid *(FL, AZ, NJ, CO, IL, IA, and others)*
 - **Tax Deeds** — government forecloses and sells the actual property deed at auction after the lien goes unpaid *(TX, GA, MI, MO, MN, WA, OR, and others)*
 - **Hybrid states** — some states use both mechanisms depending on the county or circumstance
 
+### Core Capabilities
+
 The agent combines:
 - **RAG over government websites** — county tax collector, treasurer, assessor, and recorder sites to find active liens and scheduled deed auctions
-- **Owner research** — public records, Secretary of State filings, social media, and deed history to identify who owns each parcel
+- **Owner research (Level 5 full intelligence)** — public records, Secretary of State filings, social media, court records, financial health, and deed history to build complete owner profiles
 - **Zoning & land use research** — municipal planning and zoning databases
-- **Business entity research** — when a parcel is owned by an LLC, trust, or corporation
+- **Business entity research** — LLC/trust/corp piercing with depth configurable per subscription tier
 - **Instrument-aware scoring** — separate scoring models for lien certificates vs. deed opportunities
+- **Owner outreach** — email, SMS/text, and phone calls (click-to-call + AI voice agent) to contact property owners directly
+- **All property types** — residential, commercial, vacant land, industrial, agricultural
+- **No minimum thresholds** — all liens/deeds discovered; users filter in the UI
+- **Configurable alerts** — email, SMS, or in-app notifications per user settings
 
-> **⚠️ NOTE:** Geographic scope, social media research boundaries, and budget for paid data sources are pending user input. See `toresearch.md`.
+### Deployment Model
+
+- **Development:** Local (PostgreSQL, Docker, this machine)
+- **Production:** Cloud deployment (managed database, CDN, auth provider)
+- **User-facing:** Web UI via Archon2.0 framework
+- **Internal tracking:** Linear integration for development project management
 
 ---
 
@@ -62,9 +88,9 @@ The agent's primary purpose is **investment due diligence** — providing deep, 
 - Owner research still valuable but secondary — the government is selling the deed, not the owner
 - **Key metric:** After Repair Value (ARV) vs. starting bid + estimated rehab + title risk
 
-**All property types included:** residential, commercial, vacant land, industrial, agricultural.
+**All property types included:** residential, commercial, vacant land, industrial, agricultural. No minimum lien amount or property value thresholds — all opportunities are surfaced and users filter in the UI.
 
-**Geographic scope:** Configurable at runtime — target any US county/state. Instrument type (lien vs. deed) is auto-detected from state law and county data.
+**Geographic scope:** All US states targetable. When a user logs in, the agent asks where to start searching. The system has built-in knowledge of how each state handles tax delinquency (lien vs. deed vs. hybrid) and which data sources to query per county. Instrument type is auto-detected from state law and county data.
 
 #### US State Classification (built into Discovery Agent)
 
@@ -75,17 +101,27 @@ The agent's primary purpose is **investment due diligence** — providing deep, 
 | **Hybrid** | Some counties within otherwise lien/deed states — Discovery Agent checks county-level |
 
 ### 2.2 Agent Goals
-1. **Discovery** — Find parcels with active tax liens OR scheduled deed auctions in a target geographic area
+
+#### V1 Goals (Current Scope)
+1. **Discovery** — Find parcels with active tax liens OR scheduled deed auctions in a user-selected geographic area (any US state/county)
 2. **Instrument classification** — Determine whether the opportunity is a lien certificate or tax deed (drives scoring model)
-3. **Owner identification** — Determine the true beneficial owner (individual or entity) — as deep as possible
+3. **Owner identification** — Level 5 full intelligence: beneficial owner, contact info, financial health, litigation, relatives (depth scales with subscription tier)
 4. **Lien/deed valuation** — Capture amount, years delinquent, redemption deadline (liens) or auction date + starting bid (deeds)
 5. **Property characterization** — Zoning, land use, acreage, assessed value, market value estimate, condition
 6. **Title chain research** — For tax deeds: full title chain review to identify clouds or competing claims
-7. **Entity piercing** — For LLC/trust owners: identify beneficial owner through SOS, deed chains, registered agents
+7. **Entity piercing** — For LLC/trust owners: identify beneficial owner through SOS, deed chains, registered agents (depth configurable per tier)
 8. **Risk assessment** — Environmental flags, litigation, title issues, competing liens, condition risk
 9. **Market context** — Comparable sales, neighborhood trends, development potential
 10. **Instrument-aware scoring** — Lien model (LTV, interest rate, redemption likelihood) or deed model (ARV vs. bid, title clarity, condition)
-11. **Continuous monitoring** — Database maintained by subagent; stale records auto-refreshed on schedule
+11. **Owner outreach** — Email, SMS/text, and phone calls (click-to-call + AI voice agent) for direct contact, negotiation, or redemption prompting — all configurable per user
+12. **Guided auction walkthrough** — Walk users through the pre-auction offer process and auction bidding process step by step
+13. **Configurable alerts** — Email, SMS, or in-app notifications when high-value opportunities are found (thresholds set per user)
+14. **Continuous monitoring** — Database maintained by subagent; stale records auto-refreshed on schedule (tier-dependent: on-demand, scheduled, or continuous)
+
+#### V2 Goals (Future Scope)
+15. **Autonomous pre-auction offers** — Agent drafts, sends, and negotiates pre-auction purchase offers on behalf of the user
+16. **Autonomous auction bidding** — Agent registers for and places bids at online tax deed auctions (Bid4Assets, Realauction, GovEase) per user-defined bid limits
+17. **Paid data enrichment** — PeopleDataLabs, Hunter.io, Clearbit, ATTOM API integrations for premium-tier research depth
 
 ---
 
@@ -102,7 +138,7 @@ The pipeline is **state-machine-driven**, not sequential. Every parcel record in
 
 ```
 PARCEL RESEARCH STATES:
-  discovered → parcel_researched → owner_researched → enriched → scored → complete
+  discovered → parcel_researched → owner_researched → enriched → scored → outreach_ready → complete
        ↑               ↑                 ↑                ↑          ↑
     [retry]         [retry]           [retry]          [retry]    [retry]
        ↓               ↓                 ↓                ↓          ↓
@@ -179,6 +215,7 @@ DATABASE STATES (managed by Refresh Subagent):
 | **Owner Research Agent** | Deep owner identification — public records, deed chains | crawl4ai, search APIs | Per parcel |
 | **Entity Research Agent** | LLC/trust/corp research — SOS, UCC, related entities | SOS APIs, crawl4ai | Per entity owner |
 | **Contact Research Agent** | Find phone, email, social profiles for owners | People APIs, browser | Per owner |
+| **Outreach Agent** | Send emails, SMS/text, and initiate phone calls to property owners | Twilio (voice/SMS), SendGrid (email), templates | Per owner (human-approved) |
 | **Zoning Research Agent** | Zoning, permits, development potential | GIS APIs, crawl4ai | Per parcel |
 | **Enrichment Agent** | Comps, news mentions, litigation, environmental | Zillow, EPA, courts | Per parcel |
 | **Scoring Agent** | Ranks liens by investment potential | LLM reasoning | Per parcel |
@@ -311,12 +348,20 @@ Owner research is the most critical stage for investment purposes — knowing th
 - Email finder (Hunter.io, Clearbit Reveal)
 - Relative network mapping (family members who may hold related properties)
 
-**Layer 3 — Social & Professional:**
+**Layer 3 — Social & Professional:** *(V1: browser automation on public profiles; V2: paid APIs for enrichment)*
+
+*V1 — Direct platform research (all tiers with social access):*
 - LinkedIn — professional history, current employer, connections
 - Facebook — local presence, business pages
+- Instagram — business/personal presence
 - Twitter/X — mentions of property or local real estate activity
 - Google search: `"[owner name]" "[city/state]"` news/mentions
 - Business affiliations (are they connected to any LLCs/entities?)
+
+*V2 — Paid enrichment APIs (premium tiers):*
+- PeopleDataLabs — aggregated social + public records data
+- Hunter.io — email finder for businesses and individuals
+- Clearbit — company and person enrichment
 
 **Layer 4 — Financial Health:**
 - Federal tax liens (IRS public lien search)
@@ -442,6 +487,76 @@ The Scoring Agent uses different models depending on `instrument_type`.
 
 **Scoring output:** 0-100 composite score + `tax_deed` rationale string.
 
+### 4.6 Stage 6: Owner Outreach
+
+Once a parcel is scored and owner contact info is confirmed, the **Outreach Agent** can initiate direct contact with property owners. All outreach requires explicit human approval before sending.
+
+#### Outreach Channels
+
+| Channel | Provider | Use Case | Cost |
+|---------|----------|----------|------|
+| **Email** | SendGrid API | First contact, formal offers, documentation | ~$0.001/email |
+| **SMS / Text** | Twilio SMS API | Quick follow-ups, time-sensitive alerts (auction deadlines) | ~$0.0079/msg |
+| **Phone Call** | Twilio Voice API | Direct negotiation, warm follow-up after email/SMS | ~$0.014/min |
+| **Voicemail Drop** | Twilio Voice API | Leave pre-recorded message if no answer | ~$0.014/min |
+
+#### Outreach Workflow
+
+```
+1. Contact Research Agent confirms best_phone, best_email (Stage 3)
+2. Scoring Agent scores parcel ≥ configurable threshold (e.g., 60+)
+3. Outreach Agent generates personalized message from template
+4. → HUMAN APPROVAL GATE ← (review message + recipient before send)
+5. Send via selected channel (email, SMS, or phone)
+6. Log outcome (delivered, opened, replied, bounced, declined, no_answer)
+7. Schedule follow-up if no response (configurable: 3, 7, 14 days)
+8. Track all interactions in outreach_log table
+```
+
+#### Email Outreach
+
+- **Provider:** SendGrid API (or SMTP fallback)
+- **Templates:** Configurable per instrument type (lien vs. deed) and outreach purpose:
+  - `lien_redemption_prompt` — "Your property has an outstanding tax lien..."
+  - `lien_purchase_offer` — "I'm interested in purchasing the tax lien on your property..."
+  - `deed_pre_auction_offer` — "Your property is scheduled for tax deed auction on {date}..."
+  - `general_inquiry` — "I'm researching properties in {county} and would like to discuss..."
+  - `follow_up` — "Following up on my previous message regarding {address}..."
+- **Personalization fields:** owner name, property address, lien amount, deadline/auction date, parcel ID
+- **Compliance:** CAN-SPAM compliant (unsubscribe link, physical address, honest subject lines)
+- **Tracking:** Open tracking, click tracking, bounce handling, unsubscribe management
+
+#### SMS / Text Outreach
+
+- **Provider:** Twilio Messaging API
+- **Number type:** Local number matching owner's area code (when possible) for higher response rates
+- **Templates:** Short, compliant messages (160 char optimal):
+  - "Hi {name}, I'm reaching out about {address} in {county}. There's an outstanding tax matter I'd like to discuss. Reply STOP to opt out."
+- **Compliance:** TCPA compliant — prior express consent required for marketing; informational messages have more flexibility
+- **Opt-out:** Automatic STOP keyword handling (Twilio built-in)
+- **Rate limits:** Max 1 SMS per owner per 7 days (configurable)
+
+#### Phone Call Outreach
+
+- **Provider:** Twilio Voice API
+- **Modes:**
+  1. **Click-to-call** — Agent dials owner, connects to your phone when answered (you speak live)
+  2. **Voicemail drop** — If no answer, leave a pre-recorded voicemail via Twilio
+  3. **AI-assisted call** (Phase 3) — Claude-powered voice agent handles initial conversation, escalates to human for negotiation
+- **Compliance:** TCPA and Do Not Call (DNC) registry compliance required
+  - Check owner's number against National DNC Registry before calling
+  - No calls before 8am or after 9pm local time (owner's timezone)
+  - No robocalling without prior express written consent
+- **Call logging:** Record call outcome (answered, voicemail, no_answer, wrong_number, declined), duration, notes
+
+#### Outreach Rules & Safety
+
+- **Human-in-the-loop:** ALL outreach requires explicit user approval before first contact with any owner
+- **Frequency caps:** Max contacts per owner per channel per time period (configurable, default: email 1/week, SMS 1/week, phone 1/2 weeks)
+- **Do Not Contact list:** Maintain internal DNC list — owners who opt out are permanently excluded
+- **Compliance checks:** Agent validates CAN-SPAM, TCPA, and state-specific telemarketing rules before any outreach
+- **Audit trail:** Every outreach attempt logged with timestamp, channel, template used, message content, and outcome
+
 #### Score Display in UI
 
 ```
@@ -512,34 +627,53 @@ The Scoring Agent uses different models depending on `instrument_type`.
 
 ### 6.1 Core Features (Must-Have)
 
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| **Location-based search** | Input: county + state (or ZIP code); discover all active tax liens | P0 |
-| **Parcel data extraction** | Extract APN, address, owner, assessed value, legal description | P0 |
-| **Lien data extraction** | Capture amount, year, deadline, certificate number | P0 |
-| **Owner identification** | Identify individual or entity owner from public records | P0 |
-| **Entity piercing** | For LLC/trust owners: find beneficial owner via SOS and related filings | P0 |
-| **Zoning lookup** | Retrieve zoning classification and permitted uses per parcel | P1 |
-| **Structured report** | Output per-parcel research report in markdown or JSON | P0 |
-| **Source citation** | Every data point includes its source URL and retrieval date | P0 |
-| **Rate limiting / politeness** | Throttle crawl requests; respect government site limits | P0 |
-| **Progress persistence** | Save state so research can resume after interruption | P1 |
+| Feature | Description | Priority | Tier |
+|---------|-------------|----------|------|
+| **User authentication** | OAuth + email/password login, session management | P0 | All |
+| **Location-based search** | Agent asks user where to search; input: county + state (or ZIP); discover all liens/deeds | P0 | All |
+| **State/county auto-detection** | Agent knows which states are lien vs. deed vs. hybrid; auto-selects data sources per county | P0 | All |
+| **Parcel data extraction** | Extract APN, address, owner, assessed value, legal description | P0 | All |
+| **Lien data extraction** | Capture amount, year, deadline, certificate number | P0 | All |
+| **Owner identification** | Identify individual or entity owner from public records (depth per tier) | P0 | All (depth varies) |
+| **Entity piercing** | For LLC/trust owners: find beneficial owner via SOS and related filings | P0 | Starter+ |
+| **Zoning lookup** | Retrieve zoning classification and permitted uses per parcel | P1 | Professional+ |
+| **Structured report** | Output per-parcel research report in web UI and exportable PDF | P0 | All |
+| **Source citation** | Every data point includes its source URL and retrieval date | P0 | All |
+| **Rate limiting / politeness** | Throttle crawl requests; respect government site limits | P0 | All |
+| **Progress persistence** | Save state so research can resume after interruption | P1 | All |
+| **Email outreach** | Send templated emails to property owners via SendGrid API | P1 | Starter+ |
+| **SMS/text outreach** | Send text messages to owners via Twilio SMS API | P1 | Professional+ |
+| **Phone call outreach** | Click-to-call and voicemail drop via Twilio Voice API | P2 | Enterprise |
+| **Outreach approval gate** | Configurable: manual per-message, template auto-send, or hybrid | P0 | Starter+ |
+| **Do Not Contact list** | Track opt-outs and ensure no re-contact across all channels | P0 | All |
+| **Subscription billing** | Stripe integration: plans, usage metering, upgrade prompts | P0 | All |
+| **Per-user settings** | Configurable alerts, outreach rules, thresholds, identity | P0 | All |
+| **Guided auction walkthrough** | Step-by-step guides for pre-auction offers and auction bidding process | P1 | All |
 
 ### 6.2 Advanced Features (Nice-to-Have)
 
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| **Opportunity scoring** | Score each lien by investment potential (amount, age, property value) | P1 |
-| **Social media owner research** | LinkedIn/Facebook search for owner identity and contact | P2 |
-| **Comparable sales** | Pull recent comparable sales for market context | P2 |
-| **Monitoring mode** | Continuously monitor for new liens in a target area | P2 |
-| **Alert system** | Notify when high-value lien is found (email/Slack) | P2 |
-| **Bulk processing** | Research hundreds of parcels in a single run | P1 |
-| **Deduplication** | Avoid re-researching already-known parcels | P1 |
-| **News mentions** | Search news for owner or property mentions | P2 |
-| **Environmental flags** | Flag parcels with EPA records or brownfield status | P2 |
-| **Litigation research** | Check court records for lawsuits against owner | P2 |
-| **Multi-county search** | Expand search across multiple counties in one run | P2 |
+| Feature | Description | Priority | Tier |
+|---------|-------------|----------|------|
+| **Opportunity scoring** | Score each lien by investment potential (configurable weights) | P1 | Starter+ |
+| **Social media owner research** | LinkedIn/Facebook/Instagram/Twitter search for owner identity and contact | P2 | Professional+ |
+| **Paid enrichment APIs** | PeopleDataLabs, Hunter.io, Clearbit for premium owner data | P2 | Enterprise (V2) |
+| **Comparable sales** | Pull recent comparable sales for market context | P2 | Professional+ |
+| **Monitoring mode** | Continuously monitor for new liens in a target area | P2 | Enterprise |
+| **Configurable alerts** | Email, SMS, in-app notifications — channels and thresholds per user settings | P2 | Starter+ (channels vary) |
+| **Bulk processing** | Research hundreds/thousands of parcels in a single run | P1 | Starter+ (limits vary) |
+| **Deduplication** | Avoid re-researching already-known parcels | P1 | All |
+| **News mentions** | Search news for owner or property mentions | P2 | Professional+ |
+| **Environmental flags** | Flag parcels with EPA records or brownfield status | P2 | Professional+ |
+| **Litigation research** | Check court records for lawsuits against owner | P2 | Professional+ |
+| **Multi-county search** | Expand search across multiple counties in one run | P2 | Starter+ (count varies) |
+| **AI voice agent** | Claude-powered voice agent for initial owner conversations | P3 | Enterprise (V2) |
+| **Outreach campaign tracking** | Dashboard showing open/reply/bounce rates across all contacts | P2 | Professional+ |
+| **Follow-up automation** | Auto-schedule follow-ups if no response within configurable window | P2 | Professional+ |
+| **Multi-channel sequences** | Automated outreach sequences (email → SMS → call) with configurable delays | P3 | Enterprise |
+| **Autonomous offers (V2)** | Agent drafts and sends pre-auction purchase offers on user's behalf | P3 | Enterprise (V2) |
+| **Autonomous auction bidding (V2)** | Agent registers and bids at online tax deed auctions per user limits | P3 | Enterprise (V2) |
+| **Team / org management** | Invite members, share research, assign roles | P2 | Enterprise |
+| **API access** | REST API for programmatic access to research data | P2 | Professional+ |
 
 ---
 
@@ -799,6 +933,16 @@ Every data point in the report has a citation. Citations are stored as structure
     }
   },
 
+  "outreach": {
+    "status": "pending",
+    "contacts_attempted": 0,
+    "last_contact_date": null,
+    "last_channel": null,
+    "owner_response": null,
+    "do_not_contact": false,
+    "history": []
+  },
+
   "opportunity_score": 72,
   "score_rationale": "High lien-to-value ratio (4.6%). 3 years delinquent. LLC owner with obscured beneficial ownership. Zoning allows development.",
   "flags": ["Owner entity delinquent", "No active mortgage found", "Possible absentee owner"],
@@ -880,32 +1024,65 @@ Street View:      Google Street View Static API ($7/1K requests)
 Satellite:        Google Maps Static API — maptype=satellite ($2/1K requests)
 Listing Photos:   Zillow crawl via crawl4ai (URL reference only; fetch on display)
 Geocoding:        Google Geocoding API (address → lat/lng for all image requests)
+
+--- Outreach / Communication ---
+Email:            SendGrid API (transactional + template engine, CAN-SPAM compliant)
+SMS/Text:         Twilio Messaging API (SMS, local number provisioning, STOP handling)
+Voice/Phone:      Twilio Voice API (click-to-call, voicemail drop, call recording)
+DNC Registry:     FTC DNC API or data.gov bulk download (National Do Not Call Registry)
+Phone Validation: Twilio Lookup API (carrier type, line type, caller name)
+Templates:        Jinja2 (Python template engine for personalized messages)
+
+--- SaaS Infrastructure ---
+Auth:             Supabase Auth or Auth0 (OAuth 2.0 + email/password)
+Payments:         Stripe (subscriptions + usage-based billing)
+User DB:          PostgreSQL (same cluster, separate schema or RLS)
+Multi-tenancy:    Row-level security (RLS) in PostgreSQL — all tenants share tables
+Deployment (dev): Local Docker + docker-compose
+Deployment (prod):Cloud — TBD (AWS/GCP/Fly.io/Railway)
+CDN:              Cloudflare or Vercel Edge
+Monitoring:       Sentry (errors) + Langfuse (agent traces) + Stripe Dashboard (billing)
+Project Tracking: Linear (internal development tracking)
 ```
 
 ### 9.2 Phased Rollout Plan
 
-The system grows in three phases to avoid over-engineering early while preserving a clear upgrade path.
+The system grows in phases aligned with the V1/V2 roadmap and SaaS tier rollout.
 
-#### Phase 1 — Single County, PostgreSQL Only (Pilot)
-- **Target:** 1 county, ≤ 10K parcels
+#### Phase 1 — Core Pipeline + Auth (MVP)
+- **Target:** All-state discovery, 1-2 counties deep-tested, ≤ 10K parcels
 - **Stack:** PostgreSQL 16 + pgvector, APScheduler, SQLAlchemy async
+- **Auth:** Supabase Auth or Auth0 (OAuth + email/password)
 - **Job queue:** `SELECT ... FOR UPDATE SKIP LOCKED` — built into PostgreSQL, no Redis needed
-- **Analytics:** Direct PostgreSQL queries (simple GROUP BY, ORDER BY)
-- **Monitoring:** Langfuse traces, simple log output
-- **Goal:** Validate pipeline correctness, data quality, scoring accuracy
+- **UI:** Archon2.0 web interface with user login, search, results view
+- **Tiers:** Free + Starter only (no billing yet — early access)
+- **Goal:** Validate pipeline correctness, data quality, scoring accuracy, user experience
 
-#### Phase 2 — Multi-County, Celery + Vector Search
-- **Trigger:** Expanding to multiple counties, needing rate-limit scheduling across domains
+#### Phase 2 — Outreach + Billing + Multi-County
+- **Trigger:** Pipeline validated, ready for paying users
+- **Add:** Stripe billing (subscription tiers + usage metering)
+- **Add:** Email outreach (SendGrid), SMS (Twilio), DNC compliance
 - **Add:** Celery + Redis for distributed job execution and rate limit management
 - **Add:** pgvector HNSW indexes (activate after Phase 1 data validates embedding approach)
-- **Add:** OpenCorporates / ATTOM API integrations (if budget approved)
+- **Add:** Per-user settings panel (alerts, outreach config, thresholds)
+- **Tiers:** All 4 tiers active with billing enforcement
 - **Retain:** PostgreSQL as primary store; DuckDB begins receiving Parquet exports for analytics
 
-#### Phase 3 — Production Scale (100K+ Parcels)
+#### Phase 3 — Production Scale + Premium Features (100K+ Parcels)
 - **Add:** PgBouncer connection pooling (PostgreSQL connections become the bottleneck at scale)
 - **Add:** DuckDB as primary analytics engine (column-scan performance dominates at this scale)
 - **Add:** Parquet snapshot pipeline: PostgreSQL → nightly export → DuckDB queries
-- **Add:** Monitoring dashboard (Archon2.0 UI with investment screening queries served by DuckDB)
+- **Add:** Phone outreach (click-to-call + AI voice agent)
+- **Add:** Continuous monitoring mode (Enterprise tier)
+- **Add:** Team/org management (Enterprise tier)
+- **Add:** Paid data source integrations (ATTOM, PropStream, PeopleDataLabs)
+- **Cloud:** Production deployment on cloud infrastructure
+
+#### Phase 4 — V2 Autonomous Actions
+- **Add:** Pre-auction offer generation and sending
+- **Add:** Auction platform registration and automated bidding
+- **Add:** Multi-channel outreach sequences
+- **Add:** API access for programmatic integrations
 
 ### 9.3 Database Subagent Architecture
 
@@ -1062,15 +1239,46 @@ ORDER BY redemption_deadline ASC;
 | `court-records-mcp` | State court public record search | stdio |
 | `ucc-mcp` | UCC lien filing search | stdio |
 | `image-capture-mcp` | Orchestrates all image capture: GIS map, Street View, satellite, Zillow; stores files; returns paths + crop hints | stdio |
+| `outreach-mcp` | Send emails (SendGrid), SMS (Twilio), initiate calls (Twilio Voice); log all interactions; check DNC registry; manage opt-outs | stdio |
 
 ### 9.6 Database Schema (Full)
 
 ```sql
 -- =============================================
+-- USERS & SUBSCRIPTIONS
+-- =============================================
+CREATE TABLE users (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email             TEXT NOT NULL UNIQUE,
+  display_name      TEXT,
+  auth_provider     TEXT,               -- google|github|email
+  auth_provider_id  TEXT,               -- external auth ID
+  -- Subscription
+  tier              TEXT DEFAULT 'free', -- free|starter|professional|enterprise
+  stripe_customer_id TEXT,
+  stripe_subscription_id TEXT,
+  subscription_status TEXT DEFAULT 'active', -- active|past_due|canceled|trialing
+  -- Outreach identity
+  outreach_mode     TEXT DEFAULT 'individual', -- individual|business|byoc
+  outreach_email    TEXT,               -- sending email address
+  outreach_domain   TEXT,               -- sending domain
+  sendgrid_api_key  TEXT,               -- encrypted; null = use platform pool
+  twilio_account_sid TEXT,              -- encrypted; null = use platform pool
+  twilio_auth_token TEXT,               -- encrypted
+  twilio_phone_number TEXT,             -- user's outreach phone number
+  physical_address  TEXT,               -- CAN-SPAM required physical address
+  -- Settings (JSON blob for flexibility)
+  settings          JSONB DEFAULT '{}', -- alert_channels, score_thresholds, outreach_rules, etc.
+  created_at        TIMESTAMP DEFAULT NOW(),
+  updated_at        TIMESTAMP DEFAULT NOW()
+);
+
+-- =============================================
 -- CORE PARCEL TABLE
 -- =============================================
 CREATE TABLE parcels (
   parcel_id         TEXT PRIMARY KEY,    -- APN or county-assigned ID
+  user_id           UUID REFERENCES users(id), -- which user discovered this parcel
   county            TEXT NOT NULL,
   state             TEXT NOT NULL,
   address           TEXT,
@@ -1255,7 +1463,7 @@ CREATE TABLE scores (
 CREATE TABLE research_queue (
   id            SERIAL PRIMARY KEY,
   parcel_id     TEXT NOT NULL,
-  stage         TEXT NOT NULL,           -- discover|parcel|owner|entity|contact|enrich|score
+  stage         TEXT NOT NULL,           -- discover|parcel|owner|entity|contact|enrich|score|outreach
   priority      INTEGER DEFAULT 5,       -- 1=urgent, 10=low
   status        TEXT DEFAULT 'pending',  -- pending|in_progress|done|failed|retry|skipped
   attempts      INTEGER DEFAULT 0,
@@ -1350,6 +1558,82 @@ CREATE TABLE source_screenshots (
   captured_at     TIMESTAMP DEFAULT NOW()
 );
 CREATE INDEX idx_screenshots_parcel ON source_screenshots(parcel_id);
+
+-- =============================================
+-- OUTREACH LOG (all owner communications)
+-- =============================================
+CREATE TABLE outreach_log (
+  id              SERIAL PRIMARY KEY,
+  user_id         UUID REFERENCES users(id),  -- which user initiated this outreach
+  parcel_id       TEXT REFERENCES parcels(parcel_id),
+  owner_id        INTEGER REFERENCES owners(id),
+  -- Channel
+  channel         TEXT NOT NULL,       -- email|sms|phone_call|voicemail
+  -- Contact info used
+  contact_value   TEXT NOT NULL,       -- email address, phone number
+  -- Message
+  template_name   TEXT,                -- e.g. 'lien_redemption_prompt', 'deed_pre_auction_offer'
+  subject         TEXT,                -- email subject line (null for SMS/phone)
+  message_body    TEXT,                -- full message content sent
+  -- Status
+  status          TEXT DEFAULT 'pending',  -- pending|approved|sent|delivered|opened|replied|bounced|failed|declined
+  approved_by     TEXT,                -- user who approved (human-in-the-loop)
+  approved_at     TIMESTAMP,
+  sent_at         TIMESTAMP,
+  -- Delivery tracking
+  delivery_status TEXT,                -- provider delivery status
+  opened_at       TIMESTAMP,          -- email open tracking
+  replied_at      TIMESTAMP,
+  bounce_reason   TEXT,               -- bounce/failure reason
+  -- Phone call specific
+  call_duration   INTEGER,            -- seconds (for phone calls)
+  call_outcome    TEXT,               -- answered|voicemail|no_answer|busy|wrong_number|declined
+  call_notes      TEXT,               -- agent or user notes from the call
+  call_recording_url TEXT,            -- Twilio recording URL (if recorded with consent)
+  -- Follow-up scheduling
+  follow_up_date  DATE,               -- scheduled follow-up date
+  follow_up_sent  BOOLEAN DEFAULT FALSE,
+  -- Provider references
+  provider        TEXT,               -- sendgrid|twilio
+  provider_msg_id TEXT,               -- SendGrid message ID or Twilio SID
+  -- Meta
+  created_at      TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX idx_outreach_parcel ON outreach_log(parcel_id);
+CREATE INDEX idx_outreach_owner ON outreach_log(owner_id);
+CREATE INDEX idx_outreach_followup ON outreach_log(follow_up_date)
+  WHERE follow_up_sent = FALSE AND follow_up_date IS NOT NULL;
+
+-- =============================================
+-- DO NOT CONTACT LIST (opt-outs)
+-- =============================================
+CREATE TABLE do_not_contact (
+  id              SERIAL PRIMARY KEY,
+  contact_value   TEXT NOT NULL,       -- email or phone number
+  contact_type    TEXT NOT NULL,       -- email|phone|sms
+  reason          TEXT,                -- opt_out|unsubscribe|dnc_registry|manual|bounced
+  source          TEXT,                -- how they were added (twilio_stop, sendgrid_unsub, manual, dnc_check)
+  owner_id        INTEGER REFERENCES owners(id),
+  created_at      TIMESTAMP DEFAULT NOW(),
+  UNIQUE(contact_value, contact_type)
+);
+CREATE INDEX idx_dnc_lookup ON do_not_contact(contact_value, contact_type);
+
+-- =============================================
+-- OUTREACH TEMPLATES
+-- =============================================
+CREATE TABLE outreach_templates (
+  id              SERIAL PRIMARY KEY,
+  template_name   TEXT NOT NULL UNIQUE,  -- e.g. 'lien_redemption_prompt'
+  channel         TEXT NOT NULL,         -- email|sms|phone_script
+  instrument_type TEXT,                  -- lien_certificate|tax_deed|null (both)
+  subject         TEXT,                  -- email subject (supports {{variables}})
+  body            TEXT NOT NULL,         -- message body (supports {{variables}})
+  variables       TEXT[],               -- list of template variables: owner_name, address, amount, etc.
+  is_active       BOOLEAN DEFAULT TRUE,
+  created_at      TIMESTAMP DEFAULT NOW(),
+  updated_at      TIMESTAMP DEFAULT NOW()
+);
 ```
 
 ---
@@ -1364,6 +1648,51 @@ CREATE INDEX idx_screenshots_parcel ON source_screenshots(parcel_id);
 - **CCPA/state privacy laws** — Aggregating personal data creates compliance obligations
 - **DPPA (Driver's Privacy Protection Act)** — DMV records off-limits without permissible purpose
 - **FCRA (Fair Credit Reporting Act)** — If used for credit/tenant screening, FCRA compliance required
+
+### 10.1a Outreach & Communication Legal Framework
+
+#### Email (CAN-SPAM Act)
+- **Required:** Physical mailing address in every email
+- **Required:** Clear unsubscribe mechanism (one-click, processed within 10 business days)
+- **Required:** Accurate "From" and "Subject" headers — no deceptive content
+- **Required:** Identify message as an ad/solicitation (if applicable)
+- **Prohibited:** Harvested email addresses cannot be used without consent
+- **Penalty:** Up to $51,744 per email violation
+
+#### SMS / Text (TCPA — Telephone Consumer Protection Act)
+- **Required:** Prior express consent before sending marketing texts
+- **Required:** Identify sender in every message
+- **Required:** Honor STOP/opt-out requests immediately (Twilio handles automatically)
+- **Prohibited:** Sending to numbers on the Do Not Call registry for marketing
+- **Gray area:** Informational texts about a property the owner holds (not marketing per se) — consult counsel
+- **Penalty:** $500-$1,500 per unsolicited text
+- **State laws:** Some states (FL, CA, WA) have stricter rules than federal TCPA
+
+#### Phone Calls (TCPA + TSR + State Laws)
+- **Required:** Check National Do Not Call Registry before calling
+- **Required:** No calls before 8:00 AM or after 9:00 PM (recipient's local time)
+- **Required:** Identify yourself and purpose within first 30 seconds
+- **Required:** Provide phone number or address for opt-out requests
+- **Prohibited:** Prerecorded voice messages to cell phones without prior express written consent
+- **Prohibited:** Auto-dialing cell phones without consent (ATDS restrictions)
+- **Click-to-call (recommended):** You manually initiate and speak live — fewest legal restrictions
+- **Voicemail drop:** Legal gray area — treated as a call by FCC; use with caution
+- **State-specific:** Some states require two-party consent for call recording (CA, FL, IL, PA, others)
+- **Penalty:** $500-$1,500 per violation
+
+#### Do Not Call (DNC) Compliance
+- **National DNC Registry:** Download quarterly from FTC (data.gov) or use API
+- **Internal DNC list:** Maintain your own — owners who request no contact must be added within 30 days
+- **DNC check before every call/text:** Agent must verify number is not on either list
+- **Retention:** Keep DNC records for 5 years minimum
+
+#### Best Practices for Aloha Outreach
+1. **Start with email** — lowest legal risk, highest documentation trail
+2. **SMS only with caution** — informational messages about their own property are lower risk than marketing
+3. **Phone calls: click-to-call only** — you speak live, identify yourself, state purpose
+4. **Always human approval** — no fully automated outreach without user clicking "approve"
+5. **Log everything** — every outreach attempt, response, opt-out recorded in `outreach_log`
+6. **Respect immediately** — any opt-out = permanent DNC for that contact across all channels
 
 ### 10.2 Permissible Use
 This agent is designed for:
@@ -1391,12 +1720,119 @@ This agent is **NOT** designed for:
 
 ---
 
-## 11. Open Questions
+## 11. Subscription Tiers & User Management
 
-See `toresearch.md` for full list. Key blockers:
-- [ ] Geographic scope (single county vs. multi-state)
-- [ ] Primary use case (investing vs. due diligence vs. other)
-- [ ] Output format preferences
-- [ ] Budget for paid data sources
-- [ ] Social media research boundaries (legal comfort level)
-- [ ] Monitoring vs. one-time search mode
+### 11.1 Tier Structure
+
+Aloha is a SaaS product with tiered subscriptions. Every capability — research depth, run mode, outreach, alerts — scales with the user's plan.
+
+| Feature | Free / Trial | Starter | Professional | Enterprise |
+|---------|-------------|---------|--------------|------------|
+| **Discovery** | 1 county, on-demand | 5 counties, on-demand | Unlimited counties, scheduled | Unlimited, continuous monitoring |
+| **Batch size** | Up to 50 parcels/run | Up to 500/run | Up to 5,000/run | Unlimited |
+| **Research depth** | Level 1-2 (owner name + entity basics) | Level 3 (entity piercing) | Level 4 (+ social/contact) | Level 5 (full intelligence) |
+| **Entity research** | Registered agent + officers only | Full ownership chain | Full chain + related entities | Full chain + paid enrichment APIs |
+| **Social media** | None | Public records only | All platforms (browser) | All platforms + PeopleDataLabs/Hunter.io/Clearbit |
+| **Scoring** | Basic (3 factors) | Standard (7 factors) | Full model + configurable weights | Custom scoring models |
+| **Outreach channels** | None | Email only | Email + SMS | Email + SMS + Phone (click-to-call + AI voice) |
+| **Outreach approval** | N/A | Manual per message | Configurable (manual/template/hybrid) | Fully configurable + auto-sequences |
+| **Follow-up sequences** | N/A | Single contact | Up to 3 follow-ups | Multi-channel sequences (email→SMS→phone) |
+| **Alerts** | In-app only | In-app + email | In-app + email + SMS | All channels, configurable |
+| **Run mode** | On-demand only | On-demand | On-demand + weekly scheduled | On-demand + scheduled + continuous monitoring |
+| **Data export** | None | PDF reports | PDF + CSV + API access | Full API + webhooks + bulk export |
+| **Auction walkthrough** | Read-only guides | Guided step-by-step | Guided + checklists + reminders | Guided + agent-assisted prep |
+| **Paid data sources** | None | None | Optional add-on (ATTOM, PropStream) | Included |
+| **Support** | Community | Email | Priority email | Dedicated |
+
+### 11.2 User Management
+
+| Component | Implementation |
+|-----------|---------------|
+| **Authentication** | OAuth 2.0 (Google, GitHub) + email/password via Supabase Auth or Auth0 |
+| **Authorization** | Role-based: `viewer` (read-only), `researcher` (run searches), `admin` (manage team, billing) |
+| **Multi-tenancy** | Each user/org has isolated data (row-level security in PostgreSQL) |
+| **Session management** | JWT tokens, refresh tokens, session timeout configurable |
+| **Team support** | Enterprise tier: invite team members, shared research, role assignments |
+
+### 11.3 Per-User Configuration (Settings Panel)
+
+Users configure these in their settings — the agent reads them at runtime:
+
+| Setting | Options | Default |
+|---------|---------|---------|
+| **Alert channels** | In-app, email, SMS (by tier) | In-app only |
+| **Alert score threshold** | 0-100 slider | 70 |
+| **Outreach approval mode** | Manual per message / Template auto-send / Hybrid | Manual |
+| **Outreach frequency caps** | Contacts per owner per channel per time period | Email: 1/week, SMS: 1/week, Phone: 1/2 weeks |
+| **Follow-up rules** | Number of follow-ups, delays between, channel escalation | 3 follow-ups, 3/7/14 day delays |
+| **Score threshold for outreach** | Minimum score to be eligible for outreach | 50 |
+| **Outreach identity** | Individual investor / Business entity / Custom | — |
+| **Email sending domain** | User's own domain (BYOD) or Aloha subdomain | — |
+| **Twilio credentials** | User provides own Twilio SID/token (BYOC) or uses Aloha shared pool | — |
+| **SendGrid credentials** | User provides own API key (BYOC) or uses Aloha shared | — |
+| **Phone call mode** | Click-to-call / AI voice agent / Both | Click-to-call |
+| **Do Not Contact list** | User-managed list of opt-outs | Empty |
+| **Research depth override** | Cap research at lower level than tier allows | Tier max |
+
+### 11.4 Outreach Identity Models
+
+| Model | How It Works | Best For |
+|-------|-------------|----------|
+| **BYOC (Bring Your Own Credentials)** | User provides their own Twilio account + SendGrid API key + sending domain. Full control, messages come from their identity. | Professional/Enterprise users who want branded outreach |
+| **Platform pool** | Aloha provides shared Twilio numbers + SendGrid sending domain. User's name appears in message but Aloha infrastructure sends it. | Starter users, quick onboarding |
+| **Hybrid** | User provides email domain (SendGrid BYOC) but uses Aloha Twilio pool for SMS/calls | Most common setup |
+
+### 11.5 Billing & Payments
+
+| Component | Implementation |
+|-----------|---------------|
+| **Payment processor** | Stripe (subscriptions + usage-based add-ons) |
+| **Billing model** | Monthly subscription per tier + optional usage add-ons |
+| **Usage add-ons** | Extra parcels beyond tier limit, paid data source lookups (ATTOM, PropStream), extra outreach credits |
+| **Metering** | Track parcels researched, outreach messages sent, API calls consumed per billing period |
+| **Trial** | Free tier with limited features (no credit card required) → upgrade prompt |
+
+---
+
+## 12. Version Roadmap (V1 / V2)
+
+### V1 — Discovery + Research + Guided Walkthrough + Outreach
+
+**Goal:** Users discover tax liens/deeds, research properties and owners deeply, receive scored recommendations, contact owners via email/SMS/phone, and get guided through the pre-auction and auction process.
+
+| Phase | Deliverables |
+|-------|-------------|
+| **V1.0 — Core Pipeline** | Lien/deed discovery (all states), parcel research, owner research (Level 1-3), scoring, web UI, user auth |
+| **V1.1 — Deep Research** | Level 4-5 owner research, entity piercing, social media, zoning, enrichment |
+| **V1.2 — Outreach** | Email outreach (SendGrid), SMS (Twilio), phone click-to-call, DNC compliance, templates |
+| **V1.3 — Guided Auction** | Step-by-step auction walkthrough UI, pre-auction offer templates, auction prep checklists, deadline reminders |
+| **V1.4 — Monitoring + Alerts** | Scheduled scans, continuous monitoring (premium), configurable alerts across channels |
+| **V1.5 — Subscription Tiers** | Stripe billing, tier enforcement, usage metering, team management (Enterprise) |
+
+### V2 — Autonomous Offers + Bidding
+
+**Goal:** Agent acts on behalf of the user — drafts and sends offers, registers for auctions, places bids within user-defined limits.
+
+| Phase | Deliverables |
+|-------|-------------|
+| **V2.0 — Pre-Auction Offers** | Agent generates offer letters, sends via email/mail, tracks responses, negotiates within parameters |
+| **V2.1 — Auction Bidding** | Agent registers on auction platforms (Bid4Assets, Realauction, GovEase), places bids per user limits |
+| **V2.2 — Paid Enrichment** | PeopleDataLabs, Hunter.io, Clearbit, ATTOM API integrations for premium research |
+| **V2.3 — AI Voice Agent** | Claude-powered voice calls for initial owner contact, escalation to human for negotiation |
+| **V2.4 — Multi-Channel Sequences** | Automated outreach campaigns: email → SMS → phone with configurable delays and escalation |
+
+---
+
+## 13. Open Questions
+
+All user decisions (Section A) are complete. See `toresearch.md` for remaining technical research:
+- [x] Auth provider — V1: Supabase Auth local; revisit for production
+- [x] Cloud hosting — V1: all local; production provider TBD (needs cost comparison)
+- [x] Pricing — decide later, competitive research needed first
+- [x] Freemium model — yes, free tier forever
+- [ ] Stripe integration details (subscription plans, usage metering) — Phase 2
+- [ ] Multi-tenancy strategy (RLS vs. schema-per-tenant) — see B.9.1
+- [ ] State-by-state outreach compliance matrix — see B.8.6
+- [ ] AI voice agent latency feasibility (Twilio + Claude) — see B.8.5
+- [ ] Cloud deployment cost estimation — see B.9.6
+- [ ] Credential encryption for BYOC user API keys — see B.9.4
