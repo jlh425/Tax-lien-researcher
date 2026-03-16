@@ -1,7 +1,7 @@
 # Product Requirements Document: Aloha — Tax Lien Research Agent
-**Version:** 0.6
-**Date:** 2026-03-15
-**Status:** ACTIVE DEVELOPMENT — SaaS platform with tiered subscriptions, multi-state coverage
+**Version:** 0.7
+**Date:** 2026-03-16
+**Status:** ACTIVE DEVELOPMENT — SaaS platform with tiered subscriptions, multi-state coverage. All research (A–E) complete. Ready for Phase 1 implementation.
 
 ---
 
@@ -279,21 +279,34 @@ The Discovery Agent identifies the target state's instrument type first, then qu
 - Redemption period post-sale (some states allow post-sale redemption)
 - Any known title encumbrances noted by county
 
-**Online deed auction platforms to monitor:**
+**Online deed/lien auction platforms to monitor:**
 | Platform | States/Counties |
 |----------|----------------|
-| Bid4Assets | TX, GA, WA, OR, and others |
-| Realauction | FL (deeds), NJ, and others |
-| GovEase | Multiple states |
-| SRI Tax | IN, IL, and others |
-| County-direct portals | TX county-by-county |
+| **Bid4Assets** | TX (Tarrant, Hays), WA (Pierce, Snohomish), MI (Wayne), GA counties |
+| **Realauction** | FL (lien certs + deeds), AZ (lien certs), CO (lien certs), NJ municipalities |
+| **GovEase** | IA (lien certs + deeds), multiple states |
+| **SRI Tax** | IL, IN, OH lien certs |
+| **LienHub** | FL lien cert auctions |
+| **taxsales.lgbs.com** | TX Harris, Dallas, Bexar, Travis counties (tax deeds) |
+| **newjerseytaxsale.com** | NJ municipality tax sales (all 565 municipalities) |
+| **iowataxauction.com** | IA Linn County tax sales |
+| **MN Dept of Admin minnbidapi** | MN tax-forfeited land sales (all counties) |
+| **County-direct portals** | TX, GA, and other county-specific platforms |
 
-**Crawl strategy (both instruments):**
-- Use Socrata / bulk API exports first (zero crawl, highest quality)
-- Use crawl4ai for structured government listing pages
-- Use agent-browser for JavaScript-heavy portals and online auction platforms
+**Crawl strategy — Three-Tier Architecture (both instruments):**
+
+| Tier | Coverage | Method | Notes |
+|------|----------|--------|-------|
+| **Tier 1 — Structured APIs** | ~15-20% of counties | Socrata Open Data API, ArcGIS REST `/query`, county bulk CSV/XML FTP exports | Zero crawl, highest quality, fastest |
+| **Tier 2 — Vendor-Template Scrapers** | ~50-60% of counties | Playwright scrapers templated to known portal vendors: Tyler Technologies (Munis), qPublic, Aumentum (Tyler), Vision Government Solutions | One scraper covers hundreds of counties per vendor |
+| **Tier 3 — AI-Adaptive Browser Agent** | ~20-30% of counties | Claude agent-browser (Playwright + LLM) adapts to unknown portal layouts, form-based lookups, and online auction platforms | Slowest, highest token cost, used as last resort |
+
+**Additional crawl rules:**
+- **CAPTCHA handling:** 2captcha or AntiCaptcha API for government portals that require CAPTCHA solving; agent pauses for human input if service fails
+- **Address normalization:** All addresses normalized with `usaddress` (USPS tokenizer) + libpostal before DB storage to prevent duplicate parcels
+- **Legal description parsing:** Regex + LLM extraction for lot/block/subdivision and metes-and-bounds descriptions
 - Cache results with TTL (24-48h)
-- Respect robots.txt; throttle requests (1-2 req/sec)
+- Respect robots.txt; throttle requests (1-2 req/sec, configurable per domain)
 
 ### 4.2 Stage 2: Parcel Research
 
@@ -572,20 +585,26 @@ Once a parcel is scored and owner contact info is confirmed, the **Outreach Agen
 
 | Source Type | Access Method | Data Available |
 |-------------|---------------|----------------|
-| County Tax Collector/Treasurer | Web crawl + some have APIs | Active liens, delinquency lists, deed auction schedules |
-| County Assessor | Web crawl + ArcGIS REST APIs | Parcel data, ownership, assessed value |
+| County Tax Collector/Treasurer | Tier 1 (Socrata/API) → Tier 2 (vendor-template) → Tier 3 (AI-adaptive) | Active liens, delinquency lists, deed auction schedules |
+| County Assessor | ArcGIS REST API + web crawl | Parcel data, ownership, assessed value |
 | County Recorder/Clerk | Web crawl | Deed history, title chain, mortgage filings |
 | State Revenue/Tax Dept | Web crawl | State tax liens (separate from property tax) |
-| Secretary of State | Web crawl + some APIs | Entity registration, officers, registered agent |
+| Secretary of State | Cobalt Intelligence API (all 50 states) + web crawl fallback | Entity registration, officers, registered agent |
 | State UCC Filing Office | Web crawl | Secured party liens on personal property |
-| County GIS Portal | ArcGIS REST API | Parcel boundaries, zoning, land use |
+| County GIS Portal | ArcGIS REST API `exportImage` + `query` endpoints | Parcel boundaries, zoning, land use, parcel maps |
 | Municipal Planning Dept | Web crawl | Zoning codes, permits, variances |
 | PACER (Federal Courts) | API ($0.10/page) | Federal tax liens (IRS), federal litigation |
 | State Court Portals | Web crawl | Civil/criminal filings, lis pendens |
-| **Bid4Assets** | Web crawl + API | Tax deed auction listings (TX, GA, WA, OR) |
-| **Realauction** | Web crawl | Tax deed/lien auctions (FL deeds, NJ, others) |
-| **GovEase** | Web crawl | Tax deed auction listings (multiple states) |
-| **SRI Tax** | Web crawl | Tax lien/deed auctions (IN, IL, and others) |
+| **Bid4Assets** | Web crawl + API | Tax deed/lien auctions (TX, GA, WA, OR, MI) |
+| **Realauction** | Web crawl | Tax deed/lien auctions (FL, AZ, CO, NJ) |
+| **GovEase** | Web crawl | Tax deed/lien auctions (IA, multiple states) |
+| **SRI Tax** | Web crawl | Tax lien/deed auctions (IL, IN, OH) |
+| **LienHub** | Web crawl | FL tax lien certificate auctions |
+| **taxsales.lgbs.com** | Web crawl | TX tax deed sales (Harris, Dallas, Bexar, Travis) |
+| **minnbidapi (MN Dept of Admin)** | API | MN tax-forfeited land sales (all counties) |
+| **newjerseytaxsale.com** | Web crawl | NJ municipality-level tax sales |
+
+> **Reference:** Complete county-by-county source URLs, bulk download links, Socrata dataset IDs, and ArcGIS endpoints documented in `research/D-county-data-source-map.md`.
 
 ### 5.2 Semi-Official / Aggregator Sources
 
@@ -611,15 +630,19 @@ Once a parcel is scored and owner contact info is confirmed, the **Outreach Agen
 
 ### 5.4 Public Records Aggregators
 
-| Source | Data | Cost |
-|--------|------|------|
-| Whitepages Pro | Phone, address, relatives | Paid API |
-| BeenVerified | Background, associates | Paid |
-| Spokeo | Contact info, social profiles | Paid |
-| TruthFinder | Background data | Paid |
-| Melissa Data | Address verification, owner lookup | Paid API |
+| Source | Data | Cost | Notes |
+|--------|------|------|-------|
+| **PeopleDataLabs** | Phone, email, social profiles, employment history | $0.10-0.20/record | Best overall for contact lookup; 3B+ profiles; FCRA-exempt (B2B) |
+| **Hunter.io** | Email finder by name + company/domain | $49-$399/mo | High precision for entity-owner email discovery |
+| **Cobalt Intelligence** | Secretary of State API — entity lookups across all 50 states | Usage-based | Best SOS aggregator; structured JSON responses vs. web scraping |
+| **BeenVerified** | Consumer background, associates, phone, address | $27-$40/mo | Consumer-grade; useful for individual owners |
+| **Melissa Data** | Address verification, USPS standardization | $0.01-0.05/call | NCOA address correction; prevents bounce mail |
+| **ATTOM Data** | Comprehensive property data + deed history | Enterprise pricing | Paid API add-on — Phase 3 / Enterprise tier |
+| **PropStream** | Pre-foreclosure, tax liens, ownership | $99+/mo | Third-party enrichment fallback |
 
-> **⚠️ TBD:** Budget for paid data sources not yet determined. See `toresearch.md`.
+> **Data broker compliance:** Operating Aloha as a data aggregator/reseller requires registration in ~32 states. Annual registration costs total approximately **$6,700/year** (CA, TX, FL, NY are the largest fees). See Section 10.3 for compliance details.
+
+> **Reference:** Detailed data source coverage, county-by-county source URLs, and platform quick reference are documented in `research/D-county-data-source-map.md`.
 
 ---
 
@@ -640,6 +663,10 @@ Once a parcel is scored and owner contact info is confirmed, the **Outreach Agen
 | **Structured report** | Output per-parcel research report in web UI and exportable PDF | P0 | All |
 | **Source citation** | Every data point includes its source URL and retrieval date | P0 | All |
 | **Rate limiting / politeness** | Throttle crawl requests; respect government site limits | P0 | All |
+| **Three-tier scraping engine** | Tier 1: Socrata/ArcGIS APIs → Tier 2: vendor-template Playwright (Tyler/qPublic/Aumentum/Vision) → Tier 3: AI-adaptive agent | P0 | All |
+| **CAPTCHA handling** | 2captcha or AntiCaptcha API for government portals requiring CAPTCHA; fallback to human prompt | P1 | All |
+| **Address normalization** | USPS-standard address parsing via `usaddress` + libpostal before DB storage; prevents duplicate parcel records | P0 | All |
+| **Legal description parsing** | Extract lot/block/subdivision and metes-and-bounds from raw legal descriptions via regex + LLM | P1 | All |
 | **Progress persistence** | Save state so research can resume after interruption | P1 | All |
 | **Email outreach** | Send templated emails to property owners via SendGrid API | P1 | Starter+ |
 | **SMS/text outreach** | Send text messages to owners via Twilio SMS API | P1 | Professional+ |
@@ -1024,6 +1051,21 @@ OCR (fallback):     marker + surya (PDF→Markdown, 97%+ accuracy on typed text)
 Handwriting OCR:    Azure Document Intelligence (99%+ accuracy, cloud fallback only)
 Field Extraction:   Claude Sonnet (structured deed field extraction from OCR text)
 
+--- Web Scraping / Crawl Infrastructure ---
+Tier 1 APIs:        Socrata SODA API, ArcGIS REST API (query + exportImage endpoints)
+Tier 2 Scrapers:    Playwright — vendor-templated scrapers for Tyler Tech, qPublic, Aumentum, Vision Gov
+Tier 3 Agent:       crawl4ai + Claude agent-browser for unknown/JS-heavy portals
+CAPTCHA Solving:    2captcha API (primary) or AntiCaptcha API (fallback); human handoff if both fail
+Address Parsing:    usaddress (USPS tokenizer, Python) + libpostal (international address normalization)
+Legal Description:  regex patterns + Claude Sonnet for metes-and-bounds / lot-block-subdivision parsing
+
+--- People & Entity Data APIs ---
+SOS Aggregator:     Cobalt Intelligence API (all 50 states, structured JSON entity lookups)
+Contact Lookup:     PeopleDataLabs API (email, phone, social profiles — B2B, FCRA-exempt)
+Email Finder:       Hunter.io API (email discovery by name + company/domain)
+Consumer Lookup:    BeenVerified API (individual owner phone, address, associates)
+Address Validation: Melissa Data API (USPS NCOA address correction)
+
 --- Imagery APIs ---
 GIS Parcel Maps:  County ArcGIS REST exportImage endpoint (primary)
                   Playwright screenshot of county GIS viewer (fallback)
@@ -1240,11 +1282,12 @@ ORDER BY redemption_deadline ASC;
 
 | Server | Purpose | Transport |
 |--------|---------|-----------|
-| `county-assessor-mcp` | Query county assessor APIs by parcel ID | stdio |
-| `sos-mcp` | Secretary of State business entity lookup | stdio |
-| `gis-mcp` | ArcGIS REST API wrapper for zoning/parcel lookup + parcel map export | stdio |
-| `court-records-mcp` | State court public record search | stdio |
+| `county-assessor-mcp` | Query county assessor APIs by parcel ID; wraps Tier 1 (Socrata/ArcGIS), Tier 2 (vendor templates), and Tier 3 (AI-adaptive) scrapers | stdio |
+| `sos-mcp` | Secretary of State business entity lookup via Cobalt Intelligence API (all 50 states) + state-direct web crawl fallback | stdio |
+| `gis-mcp` | ArcGIS REST API wrapper for zoning/parcel lookup + `exportImage` parcel map generation | stdio |
+| `court-records-mcp` | State court public record search + PACER federal court API | stdio |
 | `ucc-mcp` | UCC lien filing search | stdio |
+| `people-data-mcp` | Owner contact lookup: PeopleDataLabs (phone/email/social), Hunter.io (email finder), BeenVerified (consumer), Melissa Data (address validation) | stdio |
 | `image-capture-mcp` | Orchestrates all image capture: GIS map, Street View, satellite, Zillow; stores files; returns paths + crop hints | stdio |
 | `outreach-mcp` | Send emails (SendGrid), SMS (Twilio), initiate calls (Twilio Voice); log all interactions; check DNC registry; manage opt-outs | stdio |
 
@@ -1654,7 +1697,9 @@ CREATE TABLE outreach_templates (
 - **Terms of service** — Social media scraping may violate platform ToS (LinkedIn, Facebook)
 - **CCPA/state privacy laws** — Aggregating personal data creates compliance obligations
 - **DPPA (Driver's Privacy Protection Act)** — DMV records off-limits without permissible purpose
-- **FCRA (Fair Credit Reporting Act)** — If used for credit/tenant screening, FCRA compliance required
+- **FCRA (Fair Credit Reporting Act)** — If Aloha data is used for credit/tenant/employment screening, FCRA compliance required. **Safe harbor:** Aloha's stated purpose is investment research on real property — not consumer credit, insurance, or employment decisions. All ToS must clearly state this. PeopleDataLabs is FCRA-exempt (B2B use). BeenVerified is consumer-grade and must not be used for FCRA-regulated purposes.
+- **Data broker registration** — Selling or licensing personal data about individuals triggers data broker registration requirements in ~32 states. Annual total cost: ~**$6,700/year** (CA: $2,000, TX: $1,800, FL: $500, NY and others make up the rest). Required before launching a paying subscription product.
+- **Telemarketer registration** — If Aloha enables phone outreach to property owners, telemarketer registration is required in **32 states** before those features go live. Fees vary by state; budget $3,000-5,000/year for compliance. Click-to-call (user-initiated live calls) has fewer registration requirements than auto-dialed or prerecorded messages.
 
 ### 10.1a Outreach & Communication Legal Framework
 
@@ -1715,8 +1760,13 @@ This agent is **NOT** designed for:
 ### 10.3 Data Storage
 - No storage of SSNs, driver's license numbers, or financial account numbers
 - Social media findings stored as summaries, not raw scraped profiles
-- Data retention policy: TBD (see `toresearch.md`)
-- Access control: TBD
+- **Data retention policy:**
+  - Property and lien research data: 2 years from last update; purged when parcel is no longer relevant
+  - Owner contact information: 2 years from last use; purged on opt-out request
+  - Do Not Contact (DNC) list records: **5 years minimum** (FTC requirement)
+  - Outreach logs: 3 years (audit trail for CAN-SPAM/TCPA compliance)
+  - Screenshots and evidence files: 2 years (purged with parent parcel)
+- **Access control:** Row-level security (RLS) in PostgreSQL — each user sees only their own parcels/data; admin override for support escalations
 
 ### 10.4 Technical Safety
 - User-agent string identifies the agent honestly
@@ -1733,7 +1783,11 @@ This agent is **NOT** designed for:
 
 Aloha is a SaaS product with tiered subscriptions. Every capability — research depth, run mode, outreach, alerts — scales with the user's plan.
 
-| Feature | Free / Trial | Starter | Professional | Enterprise |
+**Pricing:** Free | $49/mo Starter | $99/mo Professional | $249/mo Enterprise
+
+> **Competitive context:** PropStream ($99/mo), BatchLeads ($119-299/mo), DealMachine ($49-199/mo). Aloha's differentiation is AI-powered deep owner research + scoring + outreach in one platform. No competitor combines discovery + owner intelligence + imagery + outreach + guided auction walkthrough. See `research/E-competitive-research.md` for full competitive analysis.
+
+| Feature | Free / Trial | Starter ($49/mo) | Professional ($99/mo) | Enterprise ($249/mo) |
 |---------|-------------|---------|--------------|------------|
 | **Discovery** | 1 county, on-demand | 5 counties, on-demand | Unlimited counties, scheduled | Unlimited, continuous monitoring |
 | **Batch size** | Up to 50 parcels/run | Up to 500/run | Up to 5,000/run | Unlimited |
@@ -1832,14 +1886,29 @@ Users configure these in their settings — the agent reads them at runtime:
 
 ## 13. Open Questions
 
-All user decisions (Section A) are complete. See `toresearch.md` for remaining technical research:
-- [x] Auth provider — V1: Supabase Auth local; revisit for production
-- [x] Cloud hosting — V1: all local; production provider TBD (needs cost comparison)
-- [x] Pricing — decide later, competitive research needed first
-- [x] Freemium model — yes, free tier forever
-- [ ] Stripe integration details (subscription plans, usage metering) — Phase 2
-- [ ] Multi-tenancy strategy (RLS vs. schema-per-tenant) — see B.9.1
-- [ ] State-by-state outreach compliance matrix — see B.8.6
-- [ ] AI voice agent latency feasibility (Twilio + Claude) — see B.8.5
-- [ ] Cloud deployment cost estimation — see B.9.6
-- [ ] Credential encryption for BYOC user API keys — see B.9.4
+All research (Sections A–E) is complete as of 2026-03-16. See `toresearch.md` for full research status.
+
+**Resolved:**
+- [x] Auth provider — V1: Supabase Auth local; production: Auth0 or Supabase Cloud
+- [x] Cloud hosting — V1: all local Docker; production: Railway or Fly.io (lowest ops overhead at early scale)
+- [x] Pricing — Free / $49 / $99 / $249/mo (see competitive analysis in Section 11.1)
+- [x] Freemium model — yes, free tier forever (no credit card required)
+- [x] Multi-tenancy strategy — **Row-level security (RLS)** confirmed: simpler ops vs. schema-per-tenant; all tenants share tables with `user_id` RLS policies; schema-per-tenant deferred until Enterprise demands it
+- [x] Credential encryption for BYOC user API keys — **Fernet symmetric encryption** (Python `cryptography` library); key stored in environment variable, never in DB
+- [x] Stripe integration — Stripe Checkout (subscription creation) + Stripe Customer Portal (self-serve plan management + cancellation); usage metering via Stripe Meter API for per-parcel billing
+- [x] SOS data source — **Cobalt Intelligence API** confirmed as best aggregator (all 50 states, structured JSON); scraping state SOS sites directly as fallback only
+- [x] People-finding data stack — PeopleDataLabs (primary contact lookup) + Hunter.io (email finder) + BeenVerified (consumer fallback) + Melissa Data (address validation)
+- [x] Three-tier scraping architecture — Tier 1 APIs (15-20%) → Tier 2 vendor templates (50-60%) → Tier 3 AI-adaptive (20-30%)
+- [x] County data source map — Complete in `research/D-county-data-source-map.md` (all 50 states, top counties per lien/deed state)
+- [x] Competitive landscape — Complete in `research/E-competitive-research.md`
+
+**Remaining (Phase 2+):**
+- [ ] State-by-state outreach compliance matrix — which states require telemarketer registration before phone outreach goes live; budget ~$3,000-5,000/yr
+- [ ] AI voice agent latency — Twilio + Claude real-time voice feasibility test; target < 1.5s response latency
+- [ ] Cloud deployment cost model — estimate per-tenant compute/storage costs at 1K, 10K, 100K parcel scale
+- [ ] Stripe webhook handling — failed payment → grace period → feature downgrade flow
+
+**Reference files:**
+- `research/D-county-data-source-map.md` — County/state data source map (all 50 states)
+- `research/E-competitive-research.md` — Competitive landscape and pricing benchmarks
+- `toresearch.md` — Full research agenda with completion status (all A–E complete)
