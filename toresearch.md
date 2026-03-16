@@ -459,13 +459,20 @@ These are things to investigate before or during implementation — not dependen
 
 ---
 
-## SECTION D: County/State Data Source Mapping (To Be Built)
+## SECTION D: County/State Data Source Mapping
 
-This table needs to be populated for the target geographic area.
+**Status:** V1.0 COMPLETE — see `research/D-county-data-source-map.md`
 
-| County/State | Tax Lien Source | Parcel/Assessor Source | GIS Source | SOS Source | Notes |
-|--------------|-----------------|----------------------|-----------|-----------|-------|
-| [TBD] | [URL] | [URL] | [URL] | [URL] | |
+**Coverage:**
+- D.1: All 50 states classified (instrument type, platform, cert rate, redemption rules)
+- D.3–D.8: Primary lien cert states mapped (FL, AZ, NJ, CO, IL, IA) — top 5 counties each
+- D.9–D.14: Primary deed states mapped (TX, GA, MI, MN, WA, OR) — top 5 counties each
+- D.15–D.17: Secondary/hybrid states (IN, MD, KY, CA, TN, NC, MO, NY, OH)
+- D.18: Discovery Agent source priority order
+- D.19: Platform quick reference (LienHub, RealAuction, GovEase, SRI, Bid4Assets, LGBS, etc.)
+- D.20: TBD field completion plan for new counties
+
+**What remains TBD per county:** ArcGIS parcel REST endpoint, bulk download URL, Socrata endpoint — these get filled in when a county is actively targeted and onboarded.
 
 ---
 
