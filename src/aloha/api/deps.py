@@ -4,22 +4,22 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from typing import Any
+from uuid import UUID
 
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aloha.config import Settings, settings
 from aloha.db.engine import async_session_factory
 
+_bearer = HTTPBearer(auto_error=False)
+
 
 async def get_db() -> AsyncIterator[AsyncSession]:
-    """Yield an async database session, committing on success.
-
-    Usage::
-
-        @router.get("/items")
-        async def list_items(db: AsyncSession = Depends(get_db)):
-            ...
-    """
+    """Yield an async database session, committing on success."""
     async with async_session_factory() as session:
         try:
             yield session
@@ -29,12 +29,47 @@ async def get_db() -> AsyncIterator[AsyncSession]:
             raise
 
 
-async def get_current_user() -> Any | None:
-    """Return the authenticated user.
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    db: AsyncSession = Depends(get_db),
+) -> Any | None:
+    """Return the authenticated User model, or None if no token provided.
 
-    Placeholder -- will be replaced by JWT validation logic.
+    Raises 401 if a token is present but invalid.
     """
-    return None
+    if credentials is None:
+        return None
+
+    try:
+        payload = jwt.decode(
+            credentials.credentials,
+            settings.secret_key,
+            algorithms=[settings.jwt_algorithm],
+        )
+        user_id_str: str | None = payload.get("sub")
+        if not user_id_str:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    from aloha.db.models.user import User
+
+    user = await db.get(User, UUID(user_id_str))
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    return user
+
+
+async def require_user(
+    user: Any = Depends(get_current_user),
+) -> Any:
+    """Like get_current_user but raises 401 if not authenticated."""
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+    return user
 
 
 def get_settings() -> Settings:
