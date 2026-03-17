@@ -204,41 +204,51 @@ class ImageCaptureMCPServer(BaseMCPServer):
         width: int = 800,
         height: int = 600,
     ) -> dict[str, Any]:
-        """Capture a Google Maps satellite tile centred on lat/lng."""
-        if not self._google_api_key:
-            return {"error": "GOOGLE_MAPS_API_KEY not configured", "parcel_id": parcel_id}
+        """Capture a satellite tile via Mapbox (free) or Google Maps (paid fallback)."""
+        from aloha.config import settings
+        from aloha.mcp_servers.image_capture.providers import (
+            GoogleSatelliteProvider,
+            MapboxSatelliteProvider,
+            ProviderChain,
+        )
 
-        params = {
-            "center": f"{latitude},{longitude}",
-            "zoom": str(zoom),
-            "size": f"{width}x{height}",
-            "maptype": "satellite",
-            "key": self._google_api_key,
-        }
-        try:
-            client = await self._get_client()
-            response = await client.get(_GOOGLE_STATIC_URL, params=params)
-            response.raise_for_status()
+        providers = []
+        if settings.mapbox_api_key:
+            providers.append(MapboxSatelliteProvider(access_token=settings.mapbox_api_key))
+        if self._google_api_key:
+            providers.append(GoogleSatelliteProvider(api_key=self._google_api_key))
 
-            png_bytes = response.content
-            await _save_image(
-                parcel_id, "satellite", png_bytes, "image/png",
-                source_url=_GOOGLE_STATIC_URL,
-            )
-            log.info("satellite_captured", parcel_id=parcel_id, size=len(png_bytes))
+        if not providers:
             return {
+                "error": "No satellite image provider configured (set MAPBOX_API_KEY or GOOGLE_MAPS_API_KEY)",
                 "parcel_id": parcel_id,
-                "image_type": "satellite",
-                "size_bytes": len(png_bytes),
-                "data_b64": base64.b64encode(png_bytes).decode(),
-                "mime_type": "image/png",
             }
-        except httpx.HTTPStatusError as exc:
-            log.warning("satellite_failed", parcel_id=parcel_id, status=exc.response.status_code)
-            return {"error": f"HTTP {exc.response.status_code}", "parcel_id": parcel_id}
-        except Exception as exc:
-            log.warning("satellite_failed", parcel_id=parcel_id, error=str(exc))
-            return {"error": str(exc), "parcel_id": parcel_id}
+
+        chain = ProviderChain(providers)
+        png_bytes = await chain.fetch(
+            latitude=latitude,
+            longitude=longitude,
+            zoom=zoom,
+            width=width,
+            height=height,
+        )
+
+        if not png_bytes:
+            log.warning("satellite_all_providers_failed", parcel_id=parcel_id)
+            return {"error": "All satellite providers failed", "parcel_id": parcel_id}
+
+        await _save_image(
+            parcel_id, "satellite", png_bytes, "image/png",
+            source_url="multi_provider",
+        )
+        log.info("satellite_captured", parcel_id=parcel_id, size=len(png_bytes))
+        return {
+            "parcel_id": parcel_id,
+            "image_type": "satellite",
+            "size_bytes": len(png_bytes),
+            "data_b64": base64.b64encode(png_bytes).decode(),
+            "mime_type": "image/png",
+        }
 
 
 # ── DB persistence helper ─────────────────────────────────────────────────────

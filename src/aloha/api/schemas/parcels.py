@@ -89,6 +89,18 @@ class ScoreOut(_Base):
     scored_at: datetime
 
 
+# ── Property Image ────────────────────────────────────────────────────────────
+
+class PropertyImageOut(_Base):
+    id: int
+    image_type: str
+    file_path: str          # data URI or S3 URL
+    source_url: str | None
+    width: int | None
+    height: int | None
+    captured_at: datetime
+
+
 # ── Parcel (summary — card list) ──────────────────────────────────────────────
 
 class ParcelSummary(_Base):
@@ -148,6 +160,8 @@ class ParcelDetail(_Base):
     tax_liens: list[TaxLienOut] = Field(default_factory=list)
     owners: list[OwnerOut] = Field(default_factory=list)
     scores: list[ScoreOut] = Field(default_factory=list)
+    images: list[PropertyImageOut] = Field(default_factory=list)
+    condition_summary: str | None = None  # latest vision analysis summary
 
 
 # ── Search / Scan request ─────────────────────────────────────────────────────

@@ -71,6 +71,7 @@ class Settings(BaseSettings):
     people_data_labs_api_key: str | None = None       # Contact enrichment
     hunter_io_api_key: str | None = None              # Email verification
     google_maps_api_key: str | None = None            # Street View / geocoding
+    mapbox_api_key: str | None = None                 # Mapbox Static Images API (free tier)
     two_captcha_api_key: str | None = None            # 2captcha CAPTCHA solver
 
     # ── Observability ─────────────────────────────────────────────────────

@@ -13,6 +13,7 @@ from aloha.api.schemas.parcels import (
     ParcelDetail,
     ParcelSearchParams,
     ParcelSummary,
+    PropertyImageOut,
 )
 from aloha.db.models.owner import Owner
 from aloha.db.models.parcel import Parcel
@@ -149,6 +150,17 @@ async def get_parcel(
     )
     scores = scores_result.scalars().all()
 
+    # Load property images and latest vision analysis condition summary
+    from aloha.db.repositories.image import DocumentChunkRepository, PropertyImageRepository
+
+    image_repo = PropertyImageRepository(db)
+    images = await image_repo.get_by_parcel(parcel_id)
+
+    chunk_repo = DocumentChunkRepository(db)
+    chunks = await chunk_repo.get_by_parcel(parcel_id)
+    vision_chunks = [c for c in chunks if c.source_type == "vision_analysis"]
+    condition_summary = vision_chunks[-1].content if vision_chunks else None
+
     return ParcelDetail(
         parcel_id=parcel.parcel_id,
         user_id=parcel.user_id,
@@ -179,6 +191,8 @@ async def get_parcel(
         tax_liens=[_lien_out(l) for l in liens],
         owners=[_owner_out(o) for o in owners],
         scores=[_score_out(s) for s in scores],
+        images=[PropertyImageOut.model_validate(img) for img in images],
+        condition_summary=condition_summary,
     )
 
 

@@ -249,6 +249,19 @@ class ParcelResearchAgent(BaseAgent):
                 priority=5,
             )
 
+            # Trigger image capture + vision analysis in parallel (lower priority)
+            await queue_repo.enqueue(
+                agent_name="enrichment",
+                stage="enrich",
+                parcel_id=parcel_id,
+                payload={
+                    "parcel_id": parcel_id,
+                    "state": parcel.state,
+                    "county": parcel.county,
+                },
+                priority=8,
+            )
+
             await session.commit()
 
     async def _update_status(self, parcel_id: str, status: str) -> None:

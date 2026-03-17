@@ -54,6 +54,8 @@ class ReportAgent(BaseAgent):
 
         # ── Build report sections ─────────────────────────────────────────
         report = self._compile_report(data, state, county)
+        if data.get("property_condition"):
+            report["property_condition"] = data["property_condition"]
 
         # ── LLM narrative (optional — only if model configured) ──────────
         try:
@@ -101,11 +103,20 @@ class ReportAgent(BaseAgent):
             )
             score = score_result.scalars().first()
 
+            # Load latest vision analysis condition summary from DocumentChunks
+            from aloha.db.repositories.image import DocumentChunkRepository
+
+            chunk_repo = DocumentChunkRepository(session)
+            chunks = await chunk_repo.get_by_parcel(parcel_id)
+            vision_chunks = [c for c in chunks if c.source_type == "vision_analysis"]
+            condition_summary = vision_chunks[-1].content if vision_chunks else None
+
         return {
             "parcel": _obj_to_dict(parcel),
             "liens": [_obj_to_dict(l) for l in liens],
             "owners": [_obj_to_dict(o) for o in owners],
             "score": _obj_to_dict(score),
+            "property_condition": condition_summary,
         }
 
     # ── Report compilation ────────────────────────────────────────────────
