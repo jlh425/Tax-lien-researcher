@@ -1,5 +1,6 @@
 """FastAPI application factory."""
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -24,7 +25,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Handle application startup and shutdown events."""
     configure_logging()
     log.info("aloha_starting", version=__version__, env=settings.environment)
+
+    # Start queue worker in the background
+    from aloha.agents.orchestrator.agent import agent as orchestrator
+    worker_task = asyncio.create_task(orchestrator.run_forever())
+
     yield
+
+    # Graceful shutdown
+    orchestrator.stop()
+    worker_task.cancel()
+    try:
+        await asyncio.wait_for(worker_task, timeout=10.0)
+    except (asyncio.CancelledError, asyncio.TimeoutError):
+        pass
     log.info("aloha_shutdown")
 
 
