@@ -31,6 +31,9 @@ from typing import Any
 
 import structlog
 
+from aloha.scrapers.stealth.helper import StealthHelper as _StealthHelperCls
+
+_stealth = _StealthHelperCls()
 log = structlog.get_logger().bind(scraper="tyler_eagleweb")
 
 
@@ -71,9 +74,7 @@ class TylerEagleWebScraper:
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            )
+            context = await _stealth.new_context(browser)
             page = await context.new_page()
 
             try:
@@ -90,6 +91,7 @@ class TylerEagleWebScraper:
                 ]:
                     try:
                         await page.fill(selector, apn, timeout=2000)
+                        await _stealth.human_delay()
                         break
                     except Exception:
                         continue
@@ -103,6 +105,7 @@ class TylerEagleWebScraper:
                 ]:
                     try:
                         await page.click(btn_selector, timeout=2000)
+                        await _stealth.human_delay()
                         break
                     except Exception:
                         continue

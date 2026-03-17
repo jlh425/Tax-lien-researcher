@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 import structlog
@@ -13,6 +14,13 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
 )
+
+from aloha.scrapers.rate_limiter import TokenBucketRateLimiter
+from aloha.scrapers.stealth.helper import StealthHelper
+
+# Module-level singletons shared across all scraper instances
+_shared_rate_limiter = TokenBucketRateLimiter(rate=2.0, burst=5)
+_shared_stealth = StealthHelper()
 
 
 class BaseScraper(ABC):
@@ -35,6 +43,8 @@ class BaseScraper(ABC):
             "User-Agent": "Aloha-Research/0.1 (+https://aloha.example.com)",
         }
         self._client: httpx.AsyncClient | None = None
+        self._rate_limiter: TokenBucketRateLimiter = _shared_rate_limiter
+        self._stealth: StealthHelper = _shared_stealth
 
     # ── Session management ────────────────────────────────────────────────
 
@@ -56,11 +66,10 @@ class BaseScraper(ABC):
 
     # ── Rate limiting (placeholder) ───────────────────────────────────────
 
-    async def _respect_rate_limit(self) -> None:
-        """Sleep / token-bucket check before making a request.
-
-        Override in subclasses that need specific rate limiting.
-        """
+    async def _respect_rate_limit(self, domain: str | None = None) -> None:
+        """Consume one token from the per-domain bucket, sleeping if needed."""
+        target = domain or "default"
+        await self._rate_limiter.acquire(target)
 
     # ── Abstract interface ────────────────────────────────────────────────
 
@@ -103,7 +112,8 @@ class BaseScraper(ABC):
         Returns:
             The httpx Response object.
         """
-        await self._respect_rate_limit()
+        domain = urlparse(url).netloc or "default"
+        await self._respect_rate_limit(domain)
         client = await self.get_client()
         self.log.debug("http_request", method=method, url=url)
 

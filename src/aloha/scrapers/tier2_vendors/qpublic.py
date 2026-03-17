@@ -23,6 +23,9 @@ from typing import Any
 import httpx
 import structlog
 
+from aloha.scrapers.stealth.helper import StealthHelper as _StealthHelperCls
+
+_stealth = _StealthHelperCls()
 log = structlog.get_logger().bind(scraper="qpublic")
 
 # Well-known qPublic API patterns
@@ -97,7 +100,8 @@ class QPublicScraper:
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
-            page = await browser.new_page()
+            context = await _stealth.new_context(browser)
+            page = await context.new_page()
             try:
                 search_url = f"{self.base_url}/{self.county_code}/search"
                 await page.goto(search_url, wait_until="networkidle", timeout=30_000)
@@ -111,6 +115,7 @@ class QPublicScraper:
                 ]:
                     try:
                         await page.fill(selector, apn, timeout=2000)
+                        await _stealth.human_delay()
                         break
                     except Exception:
                         continue
