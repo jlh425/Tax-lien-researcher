@@ -2,18 +2,25 @@
 
 from __future__ import annotations
 
-import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
 import structlog
 
+from aloha.core.llm import get_model
+
 
 class BaseAgent(ABC):
     """Abstract base class every Aloha agent must inherit from.
 
-    Provides shared logging, error handling, and queue helpers so
-    concrete agents only need to implement ``run`` and ``get_tools``.
+    Provides shared logging, error handling, queue helpers, and automatic
+    LLM model resolution so concrete agents only need to implement ``run``
+    and ``get_tools``.
+
+    The LLM model is resolved once from ``aloha.core.llm.get_model()`` which
+    reads the ``LLM_PROVIDER`` and ``LLM_MODEL`` environment variables. This
+    supports Anthropic, OpenAI, Ollama, Groq, and any OpenAI-compatible
+    endpoint.
     """
 
     def __init__(self, name: str) -> None:
@@ -21,6 +28,7 @@ class BaseAgent(ABC):
         self.log: structlog.stdlib.BoundLogger = structlog.get_logger().bind(
             agent=name,
         )
+        self.model = get_model()
 
     # ── Abstract interface ────────────────────────────────────────────────
 

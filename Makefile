@@ -39,6 +39,21 @@ clean:
 	rm -rf htmlcov .coverage dist build *.egg-info
 
 install:
-	pip install -e ".[dev]"
+	pip install -e ".[dev,anthropic]"
+	pre-commit install
+	playwright install chromium
+
+install-openai:
+	pip install -e ".[dev,openai]"
+	pre-commit install
+	playwright install chromium
+
+install-ollama:
+	pip install -e ".[dev,ollama]"
+	pre-commit install
+	playwright install chromium
+
+install-all-llm:
+	pip install -e ".[dev,all-llm]"
 	pre-commit install
 	playwright install chromium

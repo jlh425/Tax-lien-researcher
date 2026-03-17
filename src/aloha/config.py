@@ -1,5 +1,7 @@
 """Application configuration via Pydantic BaseSettings."""
 
+from typing import Literal
+
 from pydantic_settings import BaseSettings
 
 
@@ -16,8 +18,22 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
 
-    # ── AI / LLM ──────────────────────────────────────────────────────────
+    # ── LLM Provider ──────────────────────────────────────────────────────
+    # Supported providers: anthropic, openai, ollama, groq, openai-compatible
+    llm_provider: Literal[
+        "anthropic", "openai", "ollama", "groq", "openai-compatible"
+    ] = "anthropic"
+    llm_model: str = "claude-sonnet-4-20250514"
+
+    # Provider API keys (set the one matching your llm_provider)
     anthropic_api_key: str | None = None
+    openai_api_key: str | None = None
+    groq_api_key: str | None = None
+
+    # For ollama or any OpenAI-compatible endpoint (vLLM, LM Studio, etc.)
+    ollama_base_url: str = "http://localhost:11434"
+    openai_compatible_base_url: str | None = None
+    openai_compatible_api_key: str | None = None
 
     # ── Observability ─────────────────────────────────────────────────────
     sentry_dsn: str | None = None

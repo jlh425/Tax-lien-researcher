@@ -11,8 +11,9 @@ make lint           # ruff + mypy
 ## Architecture
 - **Backend**: Python 3.12+ / FastAPI / SQLAlchemy async / PostgreSQL / Redis
 - **Frontend**: React + TypeScript + Vite + TanStack Query
-- **AI Agents**: 12 Pydantic AI agents orchestrated via queue system
-- **Scraping**: 3-tier architecture (API → vendor Playwright → adaptive Claude)
+- **AI Agents**: 12 Pydantic AI agents orchestrated via queue system (LLM-agnostic)
+- **LLM**: Configurable — Anthropic, OpenAI, Ollama (local), Groq, or any OpenAI-compatible API
+- **Scraping**: 3-tier architecture (API → vendor Playwright → adaptive LLM)
 - **MCP Servers**: 8 Model Context Protocol servers for external data access
 
 ## Project Structure
@@ -42,7 +43,9 @@ make lint           # ruff + mypy
 
 ### Agents
 - Each agent is a package: `agent.py`, `tools.py`, `prompts.py`
-- Agents use Pydantic AI framework
+- Agents use Pydantic AI framework with configurable LLM backend
+- LLM provider set via `LLM_PROVIDER` env var (see `.env.example`)
+- `BaseAgent` auto-resolves the model via `aloha.core.llm.get_model()`
 - Agents communicate via the research queue, not direct calls
 - All agent tools must be idempotent
 
@@ -63,6 +66,20 @@ make lint           # ruff + mypy
 - All config via environment variables (see `.env.example`)
 - Pydantic BaseSettings in `src/aloha/config.py` — single source of truth
 - Never hardcode secrets, URLs, or API keys
+- LLM provider is configurable: set `LLM_PROVIDER` and `LLM_MODEL` in `.env`
+
+### LLM Configuration
+Supported providers (set `LLM_PROVIDER` in `.env`):
+| Provider | `LLM_PROVIDER` | Example `LLM_MODEL` | Install extra |
+|----------|----------------|----------------------|---------------|
+| Anthropic | `anthropic` | `claude-sonnet-4-20250514` | `pip install -e ".[anthropic]"` |
+| OpenAI | `openai` | `gpt-4o` | `pip install -e ".[openai]"` |
+| Ollama (local) | `ollama` | `llama3.1:70b` | `pip install -e ".[ollama]"` |
+| Groq | `groq` | `llama-3.3-70b-versatile` | `pip install -e ".[groq]"` |
+| OpenAI-compatible | `openai-compatible` | `model-name` | `pip install -e ".[openai]"` |
+
+The `openai-compatible` provider works with vLLM, LM Studio, llama.cpp server,
+Together AI, and any endpoint that implements the OpenAI chat completions API.
 
 ## Key Commands
 ```bash
@@ -74,5 +91,7 @@ make format                              # Auto-fix lint issues
 
 ## Dependencies
 - See `pyproject.toml` for full list
-- `pip install -e ".[dev]"` for development
+- `pip install -e ".[dev,anthropic]"` for development with Anthropic (default)
+- `pip install -e ".[dev,openai]"` for development with OpenAI/Ollama
+- `pip install -e ".[dev,all-llm]"` to install all LLM provider SDKs
 - `playwright install chromium` for scraping
