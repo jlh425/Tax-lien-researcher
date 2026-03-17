@@ -7,7 +7,7 @@ from typing import Any
 
 import structlog
 
-from aloha.core.llm import get_model
+from aloha.core.llm import get_agent_model
 
 
 class BaseAgent(ABC):
@@ -17,10 +17,11 @@ class BaseAgent(ABC):
     LLM model resolution so concrete agents only need to implement ``run``
     and ``get_tools``.
 
-    The LLM model is resolved once from ``aloha.core.llm.get_model()`` which
-    reads the ``LLM_PROVIDER`` and ``LLM_MODEL`` environment variables. This
-    supports Anthropic, OpenAI, Ollama, Groq, and any OpenAI-compatible
-    endpoint.
+    The LLM model is resolved per-agent from ``aloha.core.llm.get_agent_model()``.
+    Each agent checks for a ``LLM_AGENT_<NAME>`` env var override (format:
+    ``provider:model``), falling back to the global ``LLM_PROVIDER`` /
+    ``LLM_MODEL`` defaults. This lets you mix providers — e.g. Claude for
+    complex agents, Ollama for simple ones.
     """
 
     def __init__(self, name: str) -> None:
@@ -28,7 +29,7 @@ class BaseAgent(ABC):
         self.log: structlog.stdlib.BoundLogger = structlog.get_logger().bind(
             agent=name,
         )
-        self.model = get_model()
+        self.model = get_agent_model(name)
 
     # ── Abstract interface ────────────────────────────────────────────────
 

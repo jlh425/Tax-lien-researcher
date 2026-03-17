@@ -44,8 +44,10 @@ make lint           # ruff + mypy
 ### Agents
 - Each agent is a package: `agent.py`, `tools.py`, `prompts.py`
 - Agents use Pydantic AI framework with configurable LLM backend
-- LLM provider set via `LLM_PROVIDER` env var (see `.env.example`)
-- `BaseAgent` auto-resolves the model via `aloha.core.llm.get_model()`
+- Global default set via `LLM_PROVIDER` + `LLM_MODEL` env vars
+- Per-agent overrides via `LLM_AGENT_<NAME>=provider:model` (see `.env.example`)
+- `BaseAgent` auto-resolves via `aloha.core.llm.get_agent_model(name)`
+- Mix providers freely — e.g. Claude for orchestrator, Ollama for database agent
 - Agents communicate via the research queue, not direct calls
 - All agent tools must be idempotent
 
@@ -80,6 +82,23 @@ Supported providers (set `LLM_PROVIDER` in `.env`):
 
 The `openai-compatible` provider works with vLLM, LM Studio, llama.cpp server,
 Together AI, and any endpoint that implements the OpenAI chat completions API.
+
+#### Per-Agent Overrides
+Each agent can use a different provider/model. Set `LLM_AGENT_<NAME>=provider:model`:
+```bash
+# Global default (used by agents without an override)
+LLM_PROVIDER=ollama
+LLM_MODEL=llama3.1:70b
+
+# Complex agents get a more capable model
+LLM_AGENT_ORCHESTRATOR=anthropic:claude-sonnet-4-20250514
+LLM_AGENT_SCORING=openai:gpt-4o
+LLM_AGENT_REPORT=anthropic:claude-sonnet-4-20250514
+
+# Fast/cheap agent for simple scheduling
+LLM_AGENT_DATABASE=groq:llama-3.3-70b-versatile
+```
+Agents without an override use the global default. See `aloha.core.llm` for resolution logic.
 
 ## Key Commands
 ```bash

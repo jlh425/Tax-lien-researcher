@@ -9,6 +9,8 @@ Pydantic AI ``Model`` instance for the configured provider. Supports:
 - **groq** — Groq-hosted models
 - **openai-compatible** — Any OpenAI-compatible endpoint (vLLM, LM Studio,
   llama.cpp server, Together AI, etc.)
+
+Per-agent overrides are supported via ``LLM_AGENT_<NAME>`` env vars.
 """
 
 from __future__ import annotations
@@ -21,23 +23,13 @@ import structlog
 log = structlog.get_logger().bind(component="llm")
 
 
-@lru_cache(maxsize=1)
-def get_model() -> Any:
-    """Build and cache a Pydantic AI model from application settings.
+def _build_model(provider: str, model_name: str) -> Any:
+    """Construct a Pydantic AI model for the given provider and model name.
 
-    Returns:
-        A ``pydantic_ai.models.Model`` instance ready for use with agents.
-
-    Raises:
-        ValueError: If the configured provider is unknown or the required
-            API key / base URL is missing.
+    This is the internal factory — callers should use ``get_model()`` or
+    ``get_agent_model()`` instead.
     """
     from aloha.config import settings  # deferred to avoid circular imports
-
-    provider = settings.llm_provider
-    model_name = settings.llm_model
-
-    log.info("resolving_llm", provider=provider, model=model_name)
 
     match provider:
         case "anthropic":
@@ -86,3 +78,45 @@ def get_model() -> Any:
 
         case _:
             raise ValueError(f"Unknown LLM provider: {provider!r}")
+
+
+@lru_cache(maxsize=1)
+def get_model() -> Any:
+    """Build and cache the **global default** Pydantic AI model.
+
+    Uses ``LLM_PROVIDER`` and ``LLM_MODEL`` from settings.
+    """
+    from aloha.config import settings
+
+    log.info("resolving_default_llm", provider=settings.llm_provider, model=settings.llm_model)
+    return _build_model(settings.llm_provider, settings.llm_model)
+
+
+@lru_cache(maxsize=16)
+def get_agent_model(agent_name: str) -> Any:
+    """Build and cache a Pydantic AI model for a specific agent.
+
+    Checks for a per-agent override (``LLM_AGENT_<NAME>=provider:model``).
+    Falls back to the global default if no override is set.
+
+    Args:
+        agent_name: The agent key (e.g. ``"orchestrator"``, ``"scoring"``).
+
+    Returns:
+        A ``pydantic_ai.models.Model`` instance.
+    """
+    from aloha.config import settings
+
+    provider, model_name = settings.get_agent_llm(agent_name)
+
+    # If it resolves to the same as the global default, reuse that instance
+    if provider == settings.llm_provider and model_name == settings.llm_model:
+        return get_model()
+
+    log.info(
+        "resolving_agent_llm",
+        agent=agent_name,
+        provider=provider,
+        model=model_name,
+    )
+    return _build_model(provider, model_name)
