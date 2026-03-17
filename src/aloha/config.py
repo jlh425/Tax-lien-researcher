@@ -66,6 +66,12 @@ class Settings(BaseSettings):
             return self.llm_provider, parts[0]
         return self.llm_provider, self.llm_model
 
+    # ── External Data APIs ────────────────────────────────────────────────
+    cobalt_intelligence_api_key: str | None = None    # SOS entity lookup (all 50 states)
+    people_data_labs_api_key: str | None = None       # Contact enrichment
+    hunter_io_api_key: str | None = None              # Email verification
+    google_maps_api_key: str | None = None            # Street View / geocoding
+
     # ── Observability ─────────────────────────────────────────────────────
     sentry_dsn: str | None = None
     langfuse_public_key: str | None = None
