@@ -247,12 +247,14 @@ class TestEmbedText:
     async def test_returns_none_on_api_error(self) -> None:
         from aloha.core.embeddings import embed_text
 
+        mock_client = AsyncMock()
+        mock_client.embeddings.create = AsyncMock(side_effect=RuntimeError("API down"))
+
         with patch("aloha.core.embeddings.settings") as mock_settings:
             mock_settings.openai_api_key = "fake-key"
-            with patch("openai.AsyncOpenAI") as mock_openai:
-                mock_openai.return_value.embeddings.create = AsyncMock(
-                    side_effect=RuntimeError("API down")
-                )
+            # Patch at the module path where the deferred import resolves,
+            # not at openai.AsyncOpenAI (which would require openai installed).
+            with patch("aloha.core.embeddings.AsyncOpenAI", return_value=mock_client):
                 result = await embed_text("test text")
 
         assert result is None

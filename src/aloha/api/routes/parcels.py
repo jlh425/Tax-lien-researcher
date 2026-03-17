@@ -159,7 +159,7 @@ async def get_parcel(
     chunk_repo = DocumentChunkRepository(db)
     chunks = await chunk_repo.get_by_parcel(parcel_id)
     vision_chunks = [c for c in chunks if c.source_type == "vision_analysis"]
-    condition_summary = vision_chunks[-1].content if vision_chunks else None
+    condition_summary = _extract_condition_summary(vision_chunks[-1].content) if vision_chunks else None
 
     return ParcelDetail(
         parcel_id=parcel.parcel_id,
@@ -197,6 +197,22 @@ async def get_parcel(
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _extract_condition_summary(content: str) -> str:
+    """Extract the human-readable summary from a vision analysis JSON blob.
+
+    Falls back to the first 200 chars of content if the JSON can't be parsed
+    or the summary field is missing/empty.
+    """
+    import json
+    try:
+        summary = json.loads(content).get("summary", "")
+        if summary:
+            return summary
+    except Exception:
+        pass
+    return content[:200]
+
 
 def _lien_out(lien: TaxLien):  # type: ignore[return]
     from aloha.api.schemas.parcels import TaxLienOut

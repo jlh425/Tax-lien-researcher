@@ -70,12 +70,9 @@ class DocumentChunkRepository:
         except ImportError:
             return []
 
-        stmt = (
-            sa_select(DocumentChunk)
-            .order_by(DocumentChunk.embedding.cosine_distance(query_embedding))
-            .limit(limit)
-        )
+        stmt = sa_select(DocumentChunk)
         if parcel_id:
             stmt = stmt.where(DocumentChunk.parcel_id == parcel_id)
+        stmt = stmt.order_by(DocumentChunk.embedding.cosine_distance(query_embedding)).limit(limit)
         result = await self._session.execute(stmt)
         return result.scalars().all()

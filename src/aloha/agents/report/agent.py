@@ -109,7 +109,7 @@ class ReportAgent(BaseAgent):
             chunk_repo = DocumentChunkRepository(session)
             chunks = await chunk_repo.get_by_parcel(parcel_id)
             vision_chunks = [c for c in chunks if c.source_type == "vision_analysis"]
-            condition_summary = vision_chunks[-1].content if vision_chunks else None
+            condition_summary = _extract_condition_summary(vision_chunks[-1].content) if vision_chunks else None
 
         return {
             "parcel": _obj_to_dict(parcel),
@@ -230,6 +230,18 @@ agent = ReportAgent()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _extract_condition_summary(content: str) -> str:
+    """Extract the human-readable summary from a vision analysis JSON blob."""
+    import json
+    try:
+        summary = json.loads(content).get("summary", "")
+        if summary:
+            return summary
+    except Exception:
+        pass
+    return content[:200]
+
 
 def _obj_to_dict(obj: Any) -> dict[str, Any]:
     if obj is None:

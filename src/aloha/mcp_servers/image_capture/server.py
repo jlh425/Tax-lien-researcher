@@ -21,8 +21,6 @@ from aloha.mcp_servers.base import BaseMCPServer, ToolDefinition
 
 log = structlog.get_logger().bind(component="image_capture_mcp")
 
-_GOOGLE_STATIC_URL = "https://maps.googleapis.com/maps/api/staticmap"
-_GOOGLE_STREETVIEW_URL = "https://maps.googleapis.com/maps/api/streetview"
 _TIMEOUT = 30.0
 
 
@@ -163,37 +161,29 @@ class ImageCaptureMCPServer(BaseMCPServer):
         if not self._google_api_key:
             return {"error": "GOOGLE_MAPS_API_KEY not configured", "parcel_id": parcel_id}
 
-        params = {
-            "size": f"{width}x{height}",
-            "location": address,
-            "key": self._google_api_key,
-            "source": "outdoor",
-            "return_error_code": "true",
-        }
-        try:
-            client = await self._get_client()
-            response = await client.get(_GOOGLE_STREETVIEW_URL, params=params)
-            response.raise_for_status()
+        from aloha.mcp_servers.image_capture.providers import GoogleStreetViewProvider
 
-            jpeg_bytes = response.content
-            await _save_image(
-                parcel_id, "street_view", jpeg_bytes, "image/jpeg",
-                source_url=_GOOGLE_STREETVIEW_URL,
-            )
-            log.info("street_view_captured", parcel_id=parcel_id, size=len(jpeg_bytes))
-            return {
-                "parcel_id": parcel_id,
-                "image_type": "street_view",
-                "size_bytes": len(jpeg_bytes),
-                "data_b64": base64.b64encode(jpeg_bytes).decode(),
-                "mime_type": "image/jpeg",
-            }
-        except httpx.HTTPStatusError as exc:
-            log.warning("street_view_failed", parcel_id=parcel_id, status=exc.response.status_code)
-            return {"error": f"HTTP {exc.response.status_code}", "parcel_id": parcel_id}
-        except Exception as exc:
-            log.warning("street_view_failed", parcel_id=parcel_id, error=str(exc))
-            return {"error": str(exc), "parcel_id": parcel_id}
+        provider = GoogleStreetViewProvider(api_key=self._google_api_key, address=address)
+        # lat/lon are ignored by GoogleStreetViewProvider — it uses self._address
+        jpeg_bytes = await provider.fetch(latitude=0.0, longitude=0.0, width=width, height=height)
+
+        if not jpeg_bytes:
+            log.warning("street_view_failed", parcel_id=parcel_id)
+            return {"error": "Street View fetch failed", "parcel_id": parcel_id}
+
+        from aloha.mcp_servers.image_capture.providers import _GOOGLE_STREETVIEW_URL
+        await _save_image(
+            parcel_id, "street_view", jpeg_bytes, "image/jpeg",
+            source_url=_GOOGLE_STREETVIEW_URL,
+        )
+        log.info("street_view_captured", parcel_id=parcel_id, size=len(jpeg_bytes))
+        return {
+            "parcel_id": parcel_id,
+            "image_type": "street_view",
+            "size_bytes": len(jpeg_bytes),
+            "data_b64": base64.b64encode(jpeg_bytes).decode(),
+            "mime_type": "image/jpeg",
+        }
 
     async def capture_satellite(
         self,

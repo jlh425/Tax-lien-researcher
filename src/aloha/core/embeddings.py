@@ -17,6 +17,13 @@ import structlog
 
 log = structlog.get_logger().bind(component="embeddings")
 
+# Optional import — module starts without openai installed (e.g. CI or Ollama-only envs).
+# Mirrors the pgvector optional-import pattern in db/models/document_chunk.py.
+try:
+    from openai import AsyncOpenAI
+except ImportError:  # pragma: no cover
+    AsyncOpenAI = None  # type: ignore[assignment,misc]
+
 
 async def embed_text(text: str) -> list[float] | None:
     """Embed *text* using OpenAI text-embedding-3-small (1536 dims).
@@ -26,12 +33,10 @@ async def embed_text(text: str) -> list[float] | None:
     """
     from aloha.config import settings
 
-    if not settings.openai_api_key:
+    if not settings.openai_api_key or AsyncOpenAI is None:
         return None
 
     try:
-        from openai import AsyncOpenAI
-
         client = AsyncOpenAI(api_key=settings.openai_api_key)
         resp = await client.embeddings.create(
             model="text-embedding-3-small",
