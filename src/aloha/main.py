@@ -28,12 +28,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # Start queue worker in the background
     from aloha.agents.orchestrator.agent import agent as orchestrator
+    from aloha.agents.database.agent import agent as db_agent
+
     worker_task = asyncio.create_task(orchestrator.run_forever())
+    db_agent.start_scheduler()
 
     yield
 
     # Graceful shutdown
     orchestrator.stop()
+    db_agent.stop_scheduler()
     worker_task.cancel()
     try:
         await asyncio.wait_for(worker_task, timeout=10.0)
