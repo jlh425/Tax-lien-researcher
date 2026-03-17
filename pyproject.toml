@@ -1,0 +1,116 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aloha"
+version = "0.1.0"
+description = "Aloha — Tax lien/deed research SaaS platform"
+requires-python = ">=3.12"
+license = "Proprietary"
+readme = "README.md"
+
+dependencies = [
+    # Web framework & server
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.32,<1",
+    "pydantic>=2.9,<3",
+    "pydantic-settings>=2.6,<3",
+
+    # Database
+    "sqlalchemy[asyncio]>=2.0,<3",
+    "asyncpg>=0.30,<1",
+    "alembic>=1.14,<2",
+
+    # Task queue & caching
+    "celery[redis]>=5.4,<6",
+    "redis>=5.2,<6",
+
+    # HTTP & browser automation
+    "httpx>=0.27,<1",
+    "playwright>=1.49,<2",
+
+    # AI agents
+    "pydantic-ai>=0.0.36,<1",
+    "anthropic>=0.42,<1",
+
+    # Document processing & OCR
+    "pymupdf>=1.25,<2",
+    "docling>=2.14,<3",
+    "pytesseract>=0.3,<1",
+    "opencv-python-headless>=4.10,<5",
+
+    # Data wrangling & matching
+    "pandas>=2.2,<3",
+    "rapidfuzz>=3.10,<4",
+    "usaddress>=0.5,<1",
+
+    # Reporting
+    "jinja2>=3.1,<4",
+    "weasyprint>=63,<64",
+
+    # Auth
+    "python-jose[cryptography]>=3.3,<4",
+    "passlib[bcrypt]>=1.7,<2",
+
+    # Billing
+    "stripe>=11.3,<12",
+
+    # Observability
+    "langfuse>=2.56,<3",
+    "sentry-sdk[fastapi]>=2.19,<3",
+
+    # Utilities
+    "python-dotenv>=1.0,<2",
+    "tenacity>=9.0,<10",
+    "structlog>=24.4,<25",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3,<9",
+    "pytest-asyncio>=0.24,<1",
+    "pytest-cov>=6.0,<7",
+    "ruff>=0.8,<1",
+    "mypy>=1.13,<2",
+    "httpx>=0.27,<1",
+    "factory-boy>=3.3,<4",
+    "respx>=0.22,<1",
+    "pre-commit>=4.0,<5",
+]
+
+# ---------------------------------------------------------------------------
+# Hatch – src layout
+# ---------------------------------------------------------------------------
+[tool.hatch.build.targets.wheel]
+packages = ["src/aloha"]
+
+# ---------------------------------------------------------------------------
+# Ruff
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py312"
+line-length = 99
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "A", "SIM", "TCH"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["aloha"]
+
+# ---------------------------------------------------------------------------
+# Mypy
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-ra -q --strict-markers"

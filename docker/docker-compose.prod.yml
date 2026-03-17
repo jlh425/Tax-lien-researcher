@@ -1,0 +1,43 @@
+version: "3.9"
+
+# Production overrides — use with:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  postgres:
+    restart: always
+    ports: []
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aloha} -d ${POSTGRES_DB:-aloha}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    restart: always
+    ports: []
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  backend:
+    restart: always
+    volumes: []
+    command: uvicorn aloha.main:app --host 0.0.0.0 --port 8000 --workers 4
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    restart: always
+    build:
+      context: ../frontend
+      dockerfile: ../docker/Dockerfile.frontend
+      target: production
+    volumes: []

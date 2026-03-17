@@ -1,0 +1,70 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: aloha-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aloha}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aloha_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-aloha}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - aloha-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: aloha-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - aloha-net
+
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    container_name: aloha-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-aloha}:${POSTGRES_PASSWORD:-aloha_dev}@postgres:5432/${POSTGRES_DB:-aloha}
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ../src:/app/src
+    command: uvicorn aloha.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/src
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - aloha-net
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../docker/Dockerfile.frontend
+    container_name: aloha-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ../frontend/src:/app/src
+    depends_on:
+      - backend
+    networks:
+      - aloha-net
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  aloha-net:
+    driver: bridge
