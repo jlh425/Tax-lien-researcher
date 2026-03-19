@@ -31,3 +31,15 @@ class NotFoundError(AlohaError):
 
 class RateLimitError(AlohaError):
     """Raised when an external service rate-limits our request."""
+
+
+class QuotaExceededError(AlohaError):
+    """Raised when a user exceeds their tier's quota (scans, parcels, etc.)."""
+
+
+class BillingError(AlohaError):
+    """Raised when a billing/payment operation fails."""
+
+
+class OutreachBlockedError(AlohaError):
+    """Raised when an outreach attempt is blocked by DNC or frequency caps."""

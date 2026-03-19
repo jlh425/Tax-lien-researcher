@@ -75,3 +75,70 @@ async def require_user(
 def get_settings() -> Settings:
     """Return the application settings singleton."""
     return settings
+
+
+# ── Service factories ────────────────────────────────────────────────────
+
+
+def get_auth_service(
+    db: AsyncSession = Depends(get_db),
+) -> "AuthService":
+    """Return an AuthService bound to the current request session."""
+    from aloha.services.auth_service import AuthService
+
+    return AuthService(db, settings)
+
+
+def get_parcel_service(
+    db: AsyncSession = Depends(get_db),
+) -> "ParcelService":
+    """Return a ParcelService bound to the current request session."""
+    from aloha.services.parcel_service import ParcelService
+
+    return ParcelService(db)
+
+
+def get_billing_service(
+    db: AsyncSession = Depends(get_db),
+) -> "BillingService":
+    """Return a BillingService bound to the current request session."""
+    from aloha.services.billing_service import BillingService
+
+    return BillingService(db)
+
+
+def get_research_service(
+    db: AsyncSession = Depends(get_db),
+) -> "ResearchService":
+    """Return a ResearchService bound to the current request session."""
+    from aloha.services.billing_service import BillingService
+    from aloha.services.research_service import ResearchService
+
+    return ResearchService(db, BillingService(db))
+
+
+def get_export_service(
+    db: AsyncSession = Depends(get_db),
+) -> "ExportService":
+    """Return an ExportService bound to the current request session."""
+    from aloha.services.export_service import ExportService
+
+    return ExportService(db)
+
+
+def get_outreach_service(
+    db: AsyncSession = Depends(get_db),
+) -> "OutreachService":
+    """Return an OutreachService bound to the current request session."""
+    from aloha.services.outreach_service import OutreachService
+
+    return OutreachService(db)
+
+
+def get_notification_service(
+    db: AsyncSession = Depends(get_db),
+) -> "NotificationService":
+    """Return a NotificationService bound to the current request session."""
+    from aloha.services.notification_service import NotificationService
+
+    return NotificationService(db)

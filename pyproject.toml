@@ -7,7 +7,7 @@ name = "aloha"
 version = "0.1.0"
 description = "Aloha — Tax lien/deed research SaaS platform"
 requires-python = ">=3.12"
-license = "Proprietary"
+license = {text = "Proprietary"}
 readme = "README.md"
 
 dependencies = [

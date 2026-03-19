@@ -5,27 +5,45 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends
-from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aloha.api.deps import get_current_user, get_db
 from aloha.api.schemas.parcels import QueueStatusOut, ScanRequest, ScanResponse
-from aloha.db.models.queue_item import QueueItem
+from aloha.services.billing_service import BillingService
+from aloha.services.research_service import ResearchService
 
 router = APIRouter(tags=["scan"])
+
+
+def _research_service(db: AsyncSession = Depends(get_db)) -> ResearchService:
+    billing = BillingService(db)
+    return ResearchService(db, billing)
 
 
 @router.post("/run", response_model=ScanResponse)
 async def trigger_scan(
     body: ScanRequest,
     background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db),
-    _user: Annotated[None, Depends(get_current_user)] = None,
+    svc: ResearchService = Depends(_research_service),
+    user: Annotated[None, Depends(get_current_user)] = None,
 ) -> ScanResponse:
     """Trigger a new tax lien/deed discovery scan for a state/county.
 
-    Runs the Discovery Agent in the background and returns immediately.
+    Validates quota, then runs the Discovery Agent in the background.
     """
+    user_id = str(user.id) if user else "anonymous"
+    tier = user.tier if user else "free"
+
+    result = await svc.trigger_scan(
+        user_id=user_id,
+        tier=tier,
+        state=body.state,
+        county=body.county,
+        instrument_filter=body.instrument_filter,
+        max_records=body.max_records,
+    )
+
+    # Still run the discovery agent as a background task
     background_tasks.add_task(
         _run_discovery,
         state=body.state,
@@ -33,12 +51,7 @@ async def trigger_scan(
         instrument_filter=body.instrument_filter,
         max_records=body.max_records,
     )
-    return ScanResponse(
-        status="queued",
-        state=body.state.upper(),
-        county=body.county.lower(),
-        message=f"Discovery scan queued for {body.state.upper()}/{body.county.lower()}",
-    )
+    return result
 
 
 async def _run_discovery(
@@ -67,28 +80,8 @@ async def _run_discovery(
 
 @router.get("/queue/status", response_model=QueueStatusOut)
 async def queue_status(
-    db: AsyncSession = Depends(get_db),
+    svc: ResearchService = Depends(_research_service),
     _user: Annotated[None, Depends(get_current_user)] = None,
 ) -> QueueStatusOut:
     """Return current queue depth by status."""
-    result = await db.execute(
-        select(QueueItem.status, func.count().label("cnt"))
-        .group_by(QueueItem.status)
-    )
-    counts = {row.status: row.cnt for row in result}
-
-    # Per-agent pending breakdown
-    agent_result = await db.execute(
-        select(QueueItem.agent_name, func.count().label("cnt"))
-        .where(QueueItem.status == "pending")
-        .group_by(QueueItem.agent_name)
-    )
-    agents = {row.agent_name: row.cnt for row in agent_result}
-
-    return QueueStatusOut(
-        pending=counts.get("pending", 0),
-        processing=counts.get("processing", 0),
-        failed=counts.get("failed", 0),
-        complete=counts.get("complete", 0),
-        agents=agents,
-    )
+    return await svc.get_queue_status()
