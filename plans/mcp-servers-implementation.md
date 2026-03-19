@@ -1,0 +1,104 @@
+# Plan: 6 MCP Servers + Tests
+
+## Context
+6 of 8 MCP servers are empty stubs (just `__init__.py`). Agents can't access external data without them. After implementing servers, we add tests for all MCP servers (none exist today).
+
+## Architecture
+All servers follow the `BaseMCPServer` pattern from `mcp_servers/base.py`:
+- Inherit `BaseMCPServer(name="...")`, register tools in `_register_tools()`
+- Lazy `httpx.AsyncClient` via `_get_client()`, `close()` for cleanup
+- Tool handlers return `dict[str, Any]`, catch errors → `{"error": "..."}`
+- Module-level `_normalise_*()` helpers + `create_*_server()` factory
+- Reference impl: `mcp_servers/sos/server.py`
+
+## Files to Create (12)
+
+### Servers (`src/aloha/mcp_servers/`)
+
+| # | File | API Keys | Tools |
+|---|------|----------|-------|
+| 1 | `court_records/server.py` | None (stub) | `search_federal_cases`, `search_state_liens`, `get_case_details` |
+| 2 | `ucc/server.py` | None (stub) | `search_ucc_filings`, `get_filing_details` |
+| 3 | `county_assessor/server.py` | None (wraps scrapers) | `lookup_parcel`, `search_by_address`, `search_by_owner` |
+| 4 | `gis/server.py` | `google_maps_api_key` | `geocode_address`, `reverse_geocode`, `get_parcel_boundary` (stub) |
+| 5 | `people_data/server.py` | `people_data_labs_api_key` + `hunter_io_api_key` | `enrich_person`, `verify_email`, `search_phone` |
+| 6 | `outreach/server.py` | `sendgrid_api_key` + `twilio_*` | `send_email`, `send_sms`, `check_delivery_status` |
+
+### Tests (`tests/mcp_servers/`)
+
+One test file per server. Each covers: init + tool registration, success paths (mocked HTTP), error paths, normalization helpers, factory validation. ~15-25 tests per file.
+
+## Implementation Order
+
+1. **court_records + ucc** — pure stubs, simplest, establishes pattern
+2. **county_assessor** — wraps existing scrapers (ArcGIS → QPublic → Tyler fallback)
+3. **gis** — Google Geocoding API (single real API)
+4. **people_data** — PDL + Hunter.io (two APIs, single client)
+5. **outreach** — SendGrid + Twilio (dual clients, different auth, most complex)
+6. **All 6 test files**
+
+## Server Details
+
+### 1. court_records — `CourtRecordsMCPServer`
+- Full BaseMCPServer structure, stub handlers returning `{"stub": True, "cases": []}`
+- Canonical output shapes defined so agents can integrate now
+- `_normalise_case()`: case_id, case_title, court, case_type, filing_date, status, parties
+- `_normalise_lien()`: filing_number, debtor, creditor, amount, filing_date, state
+- Factory: no key needed
+
+### 2. ucc — `UCCMCPServer`
+- Same stub approach; handlers return `{"stub": True, "filings": []}`
+- `_normalise_ucc_filing()`: filing_number, filing_date, lapse_date, debtor_name, secured_party, collateral
+- Factory: no key needed
+
+### 3. county_assessor — `CountyAssessorMCPServer`
+- Delegates to existing scrapers: `ArcGISParcelScraper` → QPublic → Tyler
+- Import endpoint registries from `agents/parcel_research/tools.py` and scraper modules
+- `lookup_parcel`: cascade through available scrapers for state/county
+- `search_by_address`: ArcGIS address query
+- `search_by_owner`: stub (scrapers don't support name search)
+- Factory: no key needed
+
+### 4. gis — `GISMCPServer`
+- Google Geocoding API: `https://maps.googleapis.com/maps/api/geocode/json`
+- API key as query param (not header) — matches Google's pattern
+- `geocode_address` → `{formatted_address, latitude, longitude, place_id, components}`
+- `reverse_geocode` → same shape from latlng
+- `get_parcel_boundary` → stub (ArcGIS geometry pending)
+- `_normalise_geocode_result()`: extract lat/lng, flatten address_components
+- Factory requires `google_maps_api_key`
+
+### 5. people_data — `PeopleDataMCPServer`
+- PDL: `https://api.peopledatalabs.com/v5` — person enrichment + phone search
+- Hunter.io: `https://api.hunter.io/v2` — email verification
+- Single `httpx.AsyncClient` (no base_url, full URLs per request)
+- `enrich_person(name, location?, company?)` → PDL GET /person/enrich
+- `verify_email(email)` → Hunter GET /email-verifier
+- `search_phone(phone)` → PDL POST /person/search
+- Factory requires both keys
+
+### 6. outreach — `OutreachMCPServer`
+- Two clients: `_sg_client` (SendGrid, Bearer auth) + `_tw_client` (Twilio, Basic auth)
+- `send_email` → POST SendGrid `/v3/mail/send` → 202, read `x-message-id` header
+- `send_sms` → POST Twilio form-encoded `/Accounts/{sid}/Messages.json`
+- `check_delivery_status` → Twilio GET message status; SendGrid returns webhook note
+- `close()` cleans up both clients
+- Factory requires `sendgrid_api_key` + all 3 Twilio credentials
+
+## Test Pattern
+- `unittest.mock` (AsyncMock, MagicMock, patch) — same as existing tests
+- Mock `server._client` directly for HTTP success/error paths
+- For county_assessor: mock scraper classes via `patch()`
+- 5 test classes per file: Init, SuccessPaths, ErrorPaths, Normalization, Factory
+
+## Key Files Referenced
+- `src/aloha/mcp_servers/base.py` — BaseMCPServer + ToolDefinition
+- `src/aloha/mcp_servers/sos/server.py` — canonical reference
+- `src/aloha/config.py` — API key settings
+- `src/aloha/agents/parcel_research/tools.py` — `_ARCGIS_ENDPOINTS`
+
+## Verification
+1. All 6 `server.py` files parse without syntax errors
+2. `from aloha.mcp_servers.<name>.server import create_<name>_server` works for each
+3. `.venv/bin/pytest tests/mcp_servers/ -v` — all new tests pass
+4. `.venv/bin/pytest tests/ -v` — existing tests unaffected
