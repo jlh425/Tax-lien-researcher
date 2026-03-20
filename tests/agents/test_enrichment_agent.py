@@ -237,7 +237,7 @@ class TestEmbedText:
     async def test_returns_none_without_openai_key(self) -> None:
         from aloha.core.embeddings import embed_text
 
-        with patch("aloha.core.embeddings.settings") as mock_settings:
+        with patch("aloha.config.settings") as mock_settings:
             mock_settings.openai_api_key = None
             result = await embed_text("test text")
 
@@ -250,7 +250,7 @@ class TestEmbedText:
         mock_client = AsyncMock()
         mock_client.embeddings.create = AsyncMock(side_effect=RuntimeError("API down"))
 
-        with patch("aloha.core.embeddings.settings") as mock_settings:
+        with patch("aloha.config.settings") as mock_settings:
             mock_settings.openai_api_key = "fake-key"
             # Patch at the module path where the deferred import resolves,
             # not at openai.AsyncOpenAI (which would require openai installed).
@@ -258,3 +258,80 @@ class TestEmbedText:
                 result = await embed_text("test text")
 
         assert result is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# EnrichmentAgent integration tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestEnrichmentAgentRun:
+    @pytest.fixture
+    def agent(self):
+        from aloha.agents.enrichment.agent import EnrichmentAgent
+        return EnrichmentAgent()
+
+    @pytest.fixture
+    def base_context(self):
+        return {"parcel_id": "TEST-001", "state": "FL", "county": "orange"}
+
+    @pytest.mark.asyncio
+    async def test_parcel_not_found(self, agent, base_context):
+        mock_parcel_repo = MagicMock()
+        mock_parcel_repo.get = AsyncMock(return_value=None)
+        mock_session = AsyncMock()
+
+        with patch("aloha.agents.enrichment.agent.async_session_factory") as mock_factory:
+            mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("aloha.agents.enrichment.agent.ParcelRepository", return_value=mock_parcel_repo):
+                result = await agent.run(base_context)
+
+        assert result["status"] == "failed"
+        assert result["reason"] == "parcel_not_found"
+
+    @pytest.mark.asyncio
+    async def test_already_enriched_skipped(self, agent, base_context):
+        mock_parcel = MagicMock()
+        mock_parcel.research_status = "enriched"
+        mock_parcel_repo = MagicMock()
+        mock_parcel_repo.get = AsyncMock(return_value=mock_parcel)
+        mock_session = AsyncMock()
+
+        with patch("aloha.agents.enrichment.agent.async_session_factory") as mock_factory:
+            mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("aloha.agents.enrichment.agent.ParcelRepository", return_value=mock_parcel_repo):
+                result = await agent.run(base_context)
+
+        assert result["status"] == "skipped"
+        assert result["reason"] == "already_enriched"
+
+    @pytest.mark.asyncio
+    async def test_no_images_captured(self, agent, base_context):
+        mock_parcel = MagicMock()
+        mock_parcel.research_status = "owner_researched"
+        mock_parcel.latitude = None
+        mock_parcel.longitude = None
+        mock_parcel.address = None
+
+        mock_parcel_repo = MagicMock()
+        mock_parcel_repo.get = AsyncMock(return_value=mock_parcel)
+        mock_image_repo = MagicMock()
+        mock_image_repo.get_by_parcel = AsyncMock(return_value=[])
+        mock_image_server = AsyncMock()
+        mock_image_server.close = AsyncMock()
+        mock_session = AsyncMock()
+
+        with patch("aloha.agents.enrichment.agent.async_session_factory") as mock_factory:
+            mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+            with patch("aloha.agents.enrichment.agent.ParcelRepository", return_value=mock_parcel_repo):
+                with patch("aloha.agents.enrichment.agent.PropertyImageRepository", return_value=mock_image_repo):
+                    # ImageCaptureMCPServer + settings are deferred imports → patch at source
+                    with patch("aloha.mcp_servers.image_capture.server.ImageCaptureMCPServer", return_value=mock_image_server):
+                        with patch("aloha.config.settings") as mock_settings:
+                            mock_settings.google_maps_api_key = None
+                            result = await agent.run(base_context)
+
+        assert result["status"] == "no_images"
