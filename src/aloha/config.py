@@ -68,6 +68,7 @@ class Settings(BaseSettings):
 
     # ── External Data APIs ────────────────────────────────────────────────
     cobalt_intelligence_api_key: str | None = None    # SOS entity lookup (all 50 states)
+    courtlistener_api_key: str | None = None          # CourtListener REST API (free tier)
     people_data_labs_api_key: str | None = None       # Contact enrichment
     hunter_io_api_key: str | None = None              # Email verification
     google_maps_api_key: str | None = None            # Street View / geocoding
