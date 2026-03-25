@@ -124,6 +124,66 @@ export interface ParcelDetail {
   scores: Score[];
 }
 
+// ── Court Records ────────────────────────────────────────────────────────────
+
+export interface CourtParty {
+  name: string | null;
+  role: string | null;
+}
+
+export interface CourtCase {
+  case_id: string | null;
+  case_title: string | null;
+  court: string | null;
+  case_type: string | null;
+  filing_date: string | null;
+  status: string | null;
+  parties: CourtParty[];
+  docket_url: string | null;
+}
+
+export interface CaseSearchResponse {
+  cases: CourtCase[];
+  error: string | null;
+}
+
+export interface Lien {
+  filing_number: string | null;
+  debtor: string | null;
+  creditor: string | null;
+  amount: number | null;
+  filing_date: string | null;
+  lien_type: string | null;
+  state: string | null;
+}
+
+export interface LienSearchResponse {
+  liens: Lien[];
+  error: string | null;
+}
+
+// ── UCC Filings ──────────────────────────────────────────────────────────────
+
+export interface UCCFiling {
+  filing_number: string | null;
+  filing_date: string | null;
+  lapse_date: string | null;
+  filing_type: string | null;
+  debtor_name: string | null;
+  secured_party: string | null;
+  collateral: string | null;
+  state: string | null;
+}
+
+export interface UCCSearchResponse {
+  filings: UCCFiling[];
+  error: string | null;
+}
+
+export interface UCCDetailResponse extends UCCFiling {
+  error: string | null;
+}
+
 /** Queue status response. */
 export interface QueueStatus {
   pending: number;

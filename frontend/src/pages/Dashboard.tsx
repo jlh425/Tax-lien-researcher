@@ -5,8 +5,6 @@ import { ParcelCard } from "../components/ParcelCard";
 import { ParcelDetailPane } from "../components/ParcelDetailPane";
 import { ScanForm } from "../components/ScanForm";
 import { QueueStatusBar } from "../components/QueueStatusBar";
-import type { ParcelSummary } from "../types";
-
 export function Dashboard() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filters, setFilters] = useState<{
@@ -29,7 +27,11 @@ export function Dashboard() {
         <h1 className="text-xl font-bold text-gray-900">
           Aloha <span className="text-blue-600">Tax Research</span>
         </h1>
-        <div className="flex gap-3 items-center">
+        <nav className="flex gap-4 ml-8 text-sm">
+          <a href="/court-records" className="text-gray-500 hover:text-blue-600 transition">Court Records</a>
+          <a href="/ucc" className="text-gray-500 hover:text-blue-600 transition">UCC Filings</a>
+        </nav>
+        <div className="flex gap-3 items-center ml-auto">
           <QueueStatusBar />
           <button
             onClick={() => setShowScan(true)}
