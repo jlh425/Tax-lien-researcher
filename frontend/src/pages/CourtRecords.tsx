@@ -124,18 +124,36 @@ export function CourtRecords() {
       {/* Results */}
       <div className="flex-1 overflow-y-auto p-6">
         {tab === "cases" && submitted?.tab === "cases" && (
-          <CaseResults
-            cases={casesQuery.data?.cases ?? []}
-            error={casesQuery.data?.error ?? null}
-            isLoading={casesQuery.isLoading}
-          />
+          <>
+            {casesQuery.isError && (
+              <div className="bg-red-50 border border-red-200 rounded p-4 text-sm text-red-700 mb-3">
+                {(casesQuery.error as any)?.response?.data?.detail ?? "Search request failed."}
+              </div>
+            )}
+            {!casesQuery.isError && (
+              <CaseResults
+                cases={casesQuery.data?.cases ?? []}
+                error={casesQuery.data?.error ?? null}
+                isLoading={casesQuery.isLoading}
+              />
+            )}
+          </>
         )}
         {tab === "liens" && submitted?.tab === "liens" && (
-          <LienResults
-            liens={liensQuery.data?.liens ?? []}
-            error={liensQuery.data?.error ?? null}
-            isLoading={liensQuery.isLoading}
-          />
+          <>
+            {liensQuery.isError && (
+              <div className="bg-red-50 border border-red-200 rounded p-4 text-sm text-red-700 mb-3">
+                {(liensQuery.error as any)?.response?.data?.detail ?? "Search request failed."}
+              </div>
+            )}
+            {!liensQuery.isError && (
+              <LienResults
+                liens={liensQuery.data?.liens ?? []}
+                error={liensQuery.data?.error ?? null}
+                isLoading={liensQuery.isLoading}
+              />
+            )}
+          </>
         )}
         {!submitted && (
           <div className="text-center text-gray-400 mt-16">
@@ -156,8 +174,18 @@ function CaseResults({
   error: string | null;
   isLoading: boolean;
 }) {
-  if (isLoading) return <div className="text-gray-400">Searching...</div>;
-  if (error) return <div className="text-red-500 text-sm">{error}</div>;
+  if (isLoading)
+    return (
+      <div className="space-y-3">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="bg-white rounded border border-gray-200 p-4 animate-pulse">
+            <div className="h-4 bg-gray-200 rounded w-2/3 mb-2" />
+            <div className="h-3 bg-gray-100 rounded w-1/3" />
+          </div>
+        ))}
+      </div>
+    );
+  if (error) return <div className="bg-red-50 border border-red-200 rounded p-4 text-sm text-red-700">{error}</div>;
   if (cases.length === 0) return <div className="text-gray-400">No cases found.</div>;
 
   return (
@@ -210,8 +238,18 @@ function LienResults({
   error: string | null;
   isLoading: boolean;
 }) {
-  if (isLoading) return <div className="text-gray-400">Searching...</div>;
-  if (error) return <div className="text-red-500 text-sm">{error}</div>;
+  if (isLoading)
+    return (
+      <div className="space-y-3">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="bg-white rounded border border-gray-200 p-4 animate-pulse">
+            <div className="h-4 bg-gray-200 rounded w-1/2 mb-2" />
+            <div className="h-3 bg-gray-100 rounded w-1/4" />
+          </div>
+        ))}
+      </div>
+    );
+  if (error) return <div className="bg-red-50 border border-red-200 rounded p-4 text-sm text-red-700">{error}</div>;
   if (liens.length === 0) return <div className="text-gray-400">No liens found.</div>;
 
   return (

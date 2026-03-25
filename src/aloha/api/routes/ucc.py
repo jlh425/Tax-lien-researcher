@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from aloha.api.deps import get_current_user
 from aloha.api.schemas.ucc import UCCDetailResponse, UCCSearchResponse
@@ -53,7 +53,24 @@ async def get_filing_details(
 ) -> dict:
     """Fetch full UCC filing details by filing number and state."""
     server = _get_server()
-    return await server.get_filing_details(
+    result = await server.get_filing_details(
         filing_number=filing_number,
         state=state,
     )
+    if "error" in result:
+        error_msg = result["error"]
+        if "not configured" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=error_msg,
+            )
+        if "not found" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=error_msg,
+        )
+    return result

@@ -157,7 +157,7 @@ class TestGetFilingDetails:
         assert data["collateral"] == "All inventory and equipment"
 
     @pytest.mark.asyncio
-    async def test_not_found(self) -> None:
+    async def test_not_found_returns_404(self) -> None:
         mock = _mock_server()
         mock.get_filing_details.return_value = {
             "error": "Filing FAKE-001 not found in FL"
@@ -172,21 +172,30 @@ class TestGetFilingDetails:
                     params={"state": "FL"},
                 )
 
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "not found" in data["error"]
+        assert resp.status_code == 404
+        assert "not found" in resp.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_missing_state_param(self) -> None:
+    async def test_not_configured_returns_503(self) -> None:
+        mock = _mock_server()
+        mock.get_filing_details.return_value = {
+            "error": "Cobalt Intelligence API key not configured"
+        }
+
         app = _make_test_app()
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.get("/api/v1/ucc/filings/UCC-001")
+        with patch.object(ucc_mod, "_get_server", return_value=mock):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.get(
+                    "/api/v1/ucc/filings/UCC-001",
+                    params={"state": "FL"},
+                )
 
-        assert resp.status_code == 422
+        assert resp.status_code == 503
+        assert "not configured" in resp.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_api_error(self) -> None:
+    async def test_upstream_error_returns_502(self) -> None:
         mock = _mock_server()
         mock.get_filing_details.return_value = {"error": "API error 500"}
 
@@ -199,5 +208,14 @@ class TestGetFilingDetails:
                     params={"state": "FL"},
                 )
 
-        assert resp.status_code == 200
-        assert resp.json()["error"] == "API error 500"
+        assert resp.status_code == 502
+        assert "API error 500" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_missing_state_param(self) -> None:
+        app = _make_test_app()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/v1/ucc/filings/UCC-001")
+
+        assert resp.status_code == 422

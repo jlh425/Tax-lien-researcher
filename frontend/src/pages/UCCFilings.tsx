@@ -79,10 +79,22 @@ export function UCCFilings() {
             </div>
           )}
           {submitted && searchQuery.isLoading && (
-            <div className="text-gray-400">Searching...</div>
+            <div className="space-y-2">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="rounded border border-gray-200 bg-white p-3 animate-pulse">
+                  <div className="h-4 bg-gray-200 rounded w-1/2 mb-2" />
+                  <div className="h-3 bg-gray-100 rounded w-1/3" />
+                </div>
+              ))}
+            </div>
+          )}
+          {submitted && searchQuery.isError && (
+            <div className="bg-red-50 border border-red-200 rounded p-4 text-sm text-red-700">
+              {(searchQuery.error as any)?.response?.data?.detail ?? "Search request failed."}
+            </div>
           )}
           {submitted && searchQuery.data?.error && (
-            <div className="text-red-500 text-sm">{searchQuery.data.error}</div>
+            <div className="bg-red-50 border border-red-200 rounded p-4 text-sm text-red-700">{searchQuery.data.error}</div>
           )}
           {submitted && !searchQuery.isLoading && !searchQuery.data?.error && (
             <>
@@ -121,13 +133,25 @@ export function UCCFilings() {
             </div>
           )}
           {selectedFiling && detailQuery.isLoading && (
-            <div className="text-gray-400">Loading details...</div>
+            <div className="bg-white rounded border border-gray-200 p-5 animate-pulse">
+              <div className="h-5 bg-gray-200 rounded w-1/3 mb-4" />
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i}>
+                    <div className="h-3 bg-gray-100 rounded w-16 mb-1" />
+                    <div className="h-4 bg-gray-200 rounded w-24" />
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
-          {selectedFiling && detailQuery.data && !detailQuery.data.error && (
+          {selectedFiling && detailQuery.isError && (
+            <div className="bg-red-50 border border-red-200 rounded p-4 text-sm text-red-700">
+              {(detailQuery.error as any)?.response?.data?.detail ?? "Failed to load filing details."}
+            </div>
+          )}
+          {selectedFiling && detailQuery.data && (
             <FilingDetail filing={detailQuery.data} />
-          )}
-          {selectedFiling && detailQuery.data?.error && (
-            <div className="text-red-500 text-sm">{detailQuery.data.error}</div>
           )}
         </div>
       </div>

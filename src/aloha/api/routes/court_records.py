@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from aloha.api.deps import get_current_user
 from aloha.api.schemas.court_records import (
@@ -57,7 +57,24 @@ async def get_case_details(
 ) -> dict:
     """Fetch full case details by CourtListener docket ID."""
     server = _get_server()
-    return await server.get_case_details(case_id=case_id)
+    result = await server.get_case_details(case_id=case_id)
+    if "error" in result:
+        error_msg = result["error"]
+        if "not configured" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=error_msg,
+            )
+        if "not found" in error_msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_msg,
+            )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=error_msg,
+        )
+    return result
 
 
 @router.get("/liens", response_model=LienSearchResponse)

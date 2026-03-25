@@ -100,10 +100,11 @@ class TestSearchFederalCases:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/v1/court-records/cases")
 
-        assert resp.status_code == 422  # validation error
+        assert resp.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_error_response(self) -> None:
+    async def test_search_error_inline(self) -> None:
+        """Search endpoints return 200 with error field (cascade may have partial results)."""
         mock = _mock_server()
         mock.search_federal_cases.return_value = {
             "error": "API error 403",
@@ -155,7 +156,7 @@ class TestGetCaseDetails:
         assert len(data["parties"]) == 1
 
     @pytest.mark.asyncio
-    async def test_not_found(self) -> None:
+    async def test_not_found_returns_404(self) -> None:
         mock = _mock_server()
         mock.get_case_details.return_value = {"error": "Docket 99999 not found"}
 
@@ -165,9 +166,38 @@ class TestGetCaseDetails:
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 resp = await client.get("/api/v1/court-records/cases/99999")
 
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "not found" in data["error"]
+        assert resp.status_code == 404
+        assert "not found" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_not_configured_returns_503(self) -> None:
+        mock = _mock_server()
+        mock.get_case_details.return_value = {
+            "error": "CourtListener API key not configured"
+        }
+
+        app = _make_test_app()
+        with patch.object(court_records_mod, "_get_server", return_value=mock):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.get("/api/v1/court-records/cases/123")
+
+        assert resp.status_code == 503
+        assert "not configured" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_upstream_error_returns_502(self) -> None:
+        mock = _mock_server()
+        mock.get_case_details.return_value = {"error": "API error 500"}
+
+        app = _make_test_app()
+        with patch.object(court_records_mod, "_get_server", return_value=mock):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.get("/api/v1/court-records/cases/123")
+
+        assert resp.status_code == 502
+        assert "API error 500" in resp.json()["detail"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
