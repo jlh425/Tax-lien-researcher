@@ -84,9 +84,11 @@ async def extract_native_text(data: bytes) -> ExtractionResult:
 
 
 async def extract_scanned_text(data: bytes) -> ExtractionResult:
-    """Run OCR on a scanned PDF.
+    """Run OCR on a scanned PDF using PyMuPDF rendering + pytesseract.
 
-    Placeholder -- will integrate Tesseract or a cloud OCR service.
+    Renders each page to a high-DPI image, then runs Tesseract OCR via
+    pytesseract.  Falls back to empty text (with a warning) if Tesseract
+    is not installed on the host.
 
     Args:
         data: Raw PDF bytes.
@@ -94,13 +96,43 @@ async def extract_scanned_text(data: bytes) -> ExtractionResult:
     Returns:
         An ``ExtractionResult`` with OCR'd text.
     """
-    log.info("ocr_extraction_started")
-    # TODO: integrate Tesseract / Google Vision / AWS Textract
+    import pymupdf
+
+    log.info("ocr_extraction_started", size_bytes=len(data))
+
+    doc = pymupdf.open(stream=data, filetype="pdf")
+    page_count = len(doc)
+    metadata = dict(doc.metadata) if doc.metadata else {}
+    pages_text: list[str] = []
+
+    try:
+        import pytesseract
+        from PIL import Image
+
+        for i, page in enumerate(doc):
+            # Render at 300 DPI for good OCR accuracy
+            pix = page.get_pixmap(dpi=300)
+            img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+            text = pytesseract.image_to_string(img)
+            pages_text.append(text)
+            log.debug("ocr_page_done", page=i + 1, chars=len(text))
+
+        metadata["ocr_engine"] = "tesseract"
+    except ImportError:
+        log.warning("pytesseract_not_installed, OCR unavailable")
+        metadata["ocr_engine"] = "unavailable"
+    except Exception as exc:
+        log.warning("ocr_failed", error=str(exc))
+        metadata["ocr_engine"] = "error"
+        metadata["ocr_error"] = str(exc)
+    finally:
+        doc.close()
+
     return ExtractionResult(
         kind=PDFKind.SCANNED,
-        text="",
-        page_count=0,
-        metadata={"ocr": "not_yet_implemented"},
+        text="\n\n".join(pages_text),
+        page_count=page_count,
+        metadata=metadata,
     )
 
 
