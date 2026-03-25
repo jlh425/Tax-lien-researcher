@@ -1,13 +1,13 @@
-"""GIS MCP Server — Google Geocoding API integration.
+"""GIS MCP Server — Google Geocoding + ArcGIS parcel geometry.
 
 Provides geocoding (address → lat/lng) and reverse geocoding (lat/lng → address)
-via the Google Maps Geocoding API.  Parcel boundary retrieval is stubbed pending
-ArcGIS geometry integration.
+via the Google Maps Geocoding API, plus parcel boundary retrieval via county
+ArcGIS feature layers.
 
 Tools exposed:
 - geocode_address: convert a street address to coordinates
 - reverse_geocode: convert lat/lng to a formatted address
-- get_parcel_boundary: retrieve parcel polygon geometry (stub)
+- get_parcel_boundary: retrieve parcel polygon geometry (GeoJSON)
 """
 
 from __future__ import annotations
@@ -80,8 +80,8 @@ class GISMCPServer(BaseMCPServer):
         self.register_tool(ToolDefinition(
             name="get_parcel_boundary",
             description=(
-                "Retrieve the parcel boundary polygon for a given parcel ID "
-                "(stub — ArcGIS geometry integration pending)."
+                "Retrieve the parcel boundary polygon (GeoJSON) for a given "
+                "parcel ID via county ArcGIS feature layers."
             ),
             input_schema={
                 "type": "object",
@@ -174,19 +174,105 @@ class GISMCPServer(BaseMCPServer):
         state: str,
         county: str,
     ) -> dict[str, Any]:
-        """Retrieve parcel boundary geometry (stub)."""
-        log.info(
-            "get_parcel_boundary_stub",
-            parcel_id=parcel_id,
-            state=state,
-            county=county,
-        )
-        return {
-            "stub": True,
-            "parcel_id": parcel_id,
-            "boundary": None,
-            "note": "ArcGIS geometry integration pending",
-        }
+        """Retrieve parcel boundary polygon via county ArcGIS feature layer.
+
+        Queries the county ArcGIS parcel service with ``returnGeometry=True``
+        and converts the Esri rings to a GeoJSON Polygon.
+        """
+        from aloha.agents.parcel_research.tools import _ARCGIS_ENDPOINTS
+        from aloha.scrapers.tier1_apis.arcgis import ArcGISParcelScraper
+
+        key = (state.upper(), county.lower())
+        service_url = _ARCGIS_ENDPOINTS.get(key)
+        if not service_url:
+            log.info("no_arcgis_endpoint", state=state, county=county)
+            return {
+                "error": f"No ArcGIS endpoint for {state}/{county}",
+                "parcel_id": parcel_id,
+                "boundary": None,
+            }
+
+        scraper = ArcGISParcelScraper(service_url=service_url)
+        try:
+            result = await scraper.query_by_apn(parcel_id)
+            if result is None:
+                return {
+                    "error": f"Parcel {parcel_id!r} not found in {state}/{county}",
+                    "parcel_id": parcel_id,
+                    "boundary": None,
+                }
+
+            raw_attrs = result.get("raw_attributes", {})
+            # The scraper's _normalise already extracted centroid; we need
+            # the raw geometry rings from a direct query.
+            # Re-query with geometry explicitly for the raw rings.
+            apn_clean = parcel_id.replace("-", "").replace(" ", "").upper()
+            query_result = await scraper._query(
+                where_clause=f"UPPER(REPLACE(APN,'-','')) = '{apn_clean}'",
+                return_geometry=True,
+                out_sr=4326,
+            )
+            features = query_result.get("features", [])
+            if not features:
+                # Fall back to the already-found result with centroid only
+                return {
+                    "parcel_id": parcel_id,
+                    "boundary": _point_geojson(
+                        result.get("latitude"), result.get("longitude")
+                    ),
+                    "centroid": {
+                        "latitude": result.get("latitude"),
+                        "longitude": result.get("longitude"),
+                    },
+                }
+
+            geometry = features[0].get("geometry", {})
+            rings = geometry.get("rings")
+            if rings:
+                # Convert Esri rings to GeoJSON Polygon
+                geojson = {
+                    "type": "Polygon",
+                    "coordinates": rings,
+                }
+            else:
+                # Point geometry fallback
+                geojson = _point_geojson(
+                    geometry.get("y"), geometry.get("x")
+                )
+
+            log.info(
+                "parcel_boundary_found",
+                parcel_id=parcel_id,
+                state=state,
+                county=county,
+                has_polygon=bool(rings),
+            )
+            return {
+                "parcel_id": parcel_id,
+                "boundary": geojson,
+                "centroid": {
+                    "latitude": result.get("latitude"),
+                    "longitude": result.get("longitude"),
+                },
+            }
+        except Exception as exc:
+            log.warning(
+                "parcel_boundary_failed",
+                parcel_id=parcel_id,
+                error=str(exc),
+            )
+            return {"error": str(exc), "parcel_id": parcel_id, "boundary": None}
+        finally:
+            await scraper.close()
+
+
+# -- Geometry helpers ----------------------------------------------------------
+
+def _point_geojson(lat: float | None, lng: float | None) -> dict[str, Any] | None:
+    """Build a GeoJSON Point from lat/lng, or None."""
+    if lat is not None and lng is not None:
+        return {"type": "Point", "coordinates": [lng, lat]}
+    return None
 
 
 # -- Normalisation helpers -----------------------------------------------------

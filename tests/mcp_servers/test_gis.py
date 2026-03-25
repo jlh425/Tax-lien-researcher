@@ -94,10 +94,36 @@ class TestSuccessPaths:
         assert result["results"][0]["formatted_address"] == "123 Main St, Orlando, FL 32801"
 
     @pytest.mark.asyncio
-    async def test_get_parcel_boundary_stub(self) -> None:
+    async def test_get_parcel_boundary_with_polygon(self) -> None:
         server = GISMCPServer(api_key="test-key")
-        result = await server.get_parcel_boundary("123", "FL", "orange")
-        assert result["stub"] is True
+        mock_scraper = AsyncMock()
+        mock_scraper.query_by_apn.return_value = {
+            "parcel_id": "123",
+            "latitude": 28.54,
+            "longitude": -81.38,
+            "raw_attributes": {},
+        }
+        mock_scraper._query = AsyncMock(return_value={
+            "features": [{
+                "geometry": {
+                    "rings": [[[-81.39, 28.53], [-81.37, 28.53], [-81.37, 28.55], [-81.39, 28.55], [-81.39, 28.53]]],
+                },
+            }],
+        })
+        mock_scraper.close = AsyncMock()
+
+        with patch("aloha.scrapers.tier1_apis.arcgis.ArcGISParcelScraper", return_value=mock_scraper):
+            result = await server.get_parcel_boundary("123", "FL", "orange")
+
+        assert result["parcel_id"] == "123"
+        assert result["boundary"]["type"] == "Polygon"
+        assert len(result["boundary"]["coordinates"][0]) == 5
+
+    @pytest.mark.asyncio
+    async def test_get_parcel_boundary_no_endpoint(self) -> None:
+        server = GISMCPServer(api_key="test-key")
+        result = await server.get_parcel_boundary("123", "ZZ", "nowhere")
+        assert "error" in result
         assert result["boundary"] is None
 
     @pytest.mark.asyncio
