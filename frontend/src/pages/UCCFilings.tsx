@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { searchUCCFilings, getFilingDetails } from "../api/ucc";
+import { Dt, Field } from "../components/common";
 import type { UCCFiling } from "../types";
 
 export function UCCFilings() {
@@ -228,42 +229,3 @@ function FilingDetail({ filing }: { filing: UCCFiling }) {
   );
 }
 
-function Dt({ label, value }: { label: string; value: string | null }) {
-  if (!value) return null;
-  return (
-    <div>
-      <dt className="text-xs text-gray-500 font-medium">{label}</dt>
-      <dd className="text-gray-900 mt-0.5">{value}</dd>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-  maxLength,
-  className = "",
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  maxLength?: number;
-  className?: string;
-}) {
-  return (
-    <label className="flex flex-col gap-0.5">
-      <span className="text-xs text-gray-500 font-medium">{label}</span>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        maxLength={maxLength}
-        className={`border border-gray-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 ${className}`}
-      />
-    </label>
-  );
-}
