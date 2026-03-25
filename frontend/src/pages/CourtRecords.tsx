@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { searchFederalCases, searchStateLiens } from "../api/courtRecords";
+import { searchFederalCases, getCaseDetails, searchStateLiens } from "../api/courtRecords";
 import type { CourtCase, Lien } from "../types";
 
 type Tab = "cases" | "liens";
@@ -12,6 +12,7 @@ export function CourtRecords() {
   const [state, setState] = useState("");
   const [caseType, setCaseType] = useState("");
   const [lienType, setLienType] = useState("");
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<{
     tab: Tab;
     params: Record<string, string>;
@@ -39,9 +40,16 @@ export function CourtRecords() {
     enabled: submitted?.tab === "liens",
   });
 
+  const detailQuery = useQuery({
+    queryKey: ["case-detail", selectedCaseId],
+    queryFn: () => getCaseDetails(selectedCaseId!),
+    enabled: !!selectedCaseId,
+  });
+
   function handleCaseSearch(e: React.FormEvent) {
     e.preventDefault();
     if (!partyName.trim()) return;
+    setSelectedCaseId(null);
     setSubmitted({
       tab: "cases",
       params: { party_name: partyName, state, case_type: caseType },
@@ -122,42 +130,79 @@ export function CourtRecords() {
       </div>
 
       {/* Results */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex flex-1 overflow-hidden">
+        {/* List pane */}
+        <div className={`overflow-y-auto p-4 ${tab === "cases" && submitted?.tab === "cases" ? "w-1/2 border-r border-gray-200" : "flex-1"}`}>
+          {tab === "cases" && submitted?.tab === "cases" && (
+            <>
+              {casesQuery.isError && (
+                <div className="bg-red-50 border border-red-200 rounded p-4 text-sm text-red-700 mb-3">
+                  {(casesQuery.error as any)?.response?.data?.detail ?? "Search request failed."}
+                </div>
+              )}
+              {!casesQuery.isError && (
+                <CaseResults
+                  cases={casesQuery.data?.cases ?? []}
+                  error={casesQuery.data?.error ?? null}
+                  isLoading={casesQuery.isLoading}
+                  selectedId={selectedCaseId}
+                  onSelect={setSelectedCaseId}
+                />
+              )}
+            </>
+          )}
+          {tab === "liens" && submitted?.tab === "liens" && (
+            <>
+              {liensQuery.isError && (
+                <div className="bg-red-50 border border-red-200 rounded p-4 text-sm text-red-700 mb-3">
+                  {(liensQuery.error as any)?.response?.data?.detail ?? "Search request failed."}
+                </div>
+              )}
+              {!liensQuery.isError && (
+                <LienResults
+                  liens={liensQuery.data?.liens ?? []}
+                  error={liensQuery.data?.error ?? null}
+                  isLoading={liensQuery.isLoading}
+                />
+              )}
+            </>
+          )}
+          {!submitted && (
+            <div className="text-center text-gray-400 mt-16">
+              Enter search criteria above to find court records.
+            </div>
+          )}
+        </div>
+
+        {/* Detail pane (cases only) */}
         {tab === "cases" && submitted?.tab === "cases" && (
-          <>
-            {casesQuery.isError && (
-              <div className="bg-red-50 border border-red-200 rounded p-4 text-sm text-red-700 mb-3">
-                {(casesQuery.error as any)?.response?.data?.detail ?? "Search request failed."}
+          <div className="w-1/2 overflow-y-auto p-4">
+            {!selectedCaseId && (
+              <div className="flex items-center justify-center h-full text-gray-400">
+                Select a case to view details
               </div>
             )}
-            {!casesQuery.isError && (
-              <CaseResults
-                cases={casesQuery.data?.cases ?? []}
-                error={casesQuery.data?.error ?? null}
-                isLoading={casesQuery.isLoading}
-              />
-            )}
-          </>
-        )}
-        {tab === "liens" && submitted?.tab === "liens" && (
-          <>
-            {liensQuery.isError && (
-              <div className="bg-red-50 border border-red-200 rounded p-4 text-sm text-red-700 mb-3">
-                {(liensQuery.error as any)?.response?.data?.detail ?? "Search request failed."}
+            {selectedCaseId && detailQuery.isLoading && (
+              <div className="bg-white rounded border border-gray-200 p-5 animate-pulse">
+                <div className="h-5 bg-gray-200 rounded w-2/3 mb-4" />
+                <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                  {[...Array(6)].map((_, i) => (
+                    <div key={i}>
+                      <div className="h-3 bg-gray-100 rounded w-16 mb-1" />
+                      <div className="h-4 bg-gray-200 rounded w-24" />
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
-            {!liensQuery.isError && (
-              <LienResults
-                liens={liensQuery.data?.liens ?? []}
-                error={liensQuery.data?.error ?? null}
-                isLoading={liensQuery.isLoading}
-              />
+            {selectedCaseId && detailQuery.isError && (
+              <div className="bg-red-50 border border-red-200 rounded p-4 text-sm text-red-700">
+                {(detailQuery.error as any)?.response?.data?.detail ?? "Failed to load case details."}
+              </div>
             )}
-          </>
-        )}
-        {!submitted && (
-          <div className="text-center text-gray-400 mt-16">
-            Enter search criteria above to find court records.
+            {selectedCaseId && detailQuery.data && (
+              <CaseDetail caseData={detailQuery.data} />
+            )}
           </div>
         )}
       </div>
@@ -169,10 +214,14 @@ function CaseResults({
   cases,
   error,
   isLoading,
+  selectedId,
+  onSelect,
 }: {
   cases: CourtCase[];
   error: string | null;
   isLoading: boolean;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
 }) {
   if (isLoading)
     return (
@@ -192,10 +241,18 @@ function CaseResults({
     <div className="space-y-3">
       <div className="text-xs text-gray-400">{cases.length} case(s) found</div>
       {cases.map((c, i) => (
-        <div key={c.case_id ?? i} className="bg-white rounded border border-gray-200 p-4">
+        <div
+          key={c.case_id ?? i}
+          onClick={() => c.case_id && onSelect(c.case_id)}
+          className={`rounded border p-4 cursor-pointer transition ${
+            selectedId === c.case_id
+              ? "border-blue-500 bg-blue-50"
+              : "border-gray-200 bg-white hover:border-gray-300"
+          }`}
+        >
           <div className="flex justify-between items-start gap-4">
-            <div>
-              <div className="font-medium text-gray-900">{c.case_title ?? "Untitled"}</div>
+            <div className="min-w-0">
+              <div className="font-medium text-gray-900 truncate">{c.case_title ?? "Untitled"}</div>
               <div className="text-sm text-gray-500 mt-0.5">
                 {c.court && <span className="mr-3">Court: {c.court}</span>}
                 {c.case_type && <span className="mr-3">Type: {c.case_type}</span>}
@@ -203,28 +260,69 @@ function CaseResults({
               </div>
             </div>
             {c.status && (
-              <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600 whitespace-nowrap">
+              <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600 whitespace-nowrap shrink-0">
                 {c.status}
               </span>
             )}
           </div>
-          {c.parties.length > 0 && (
-            <div className="mt-2 text-xs text-gray-400">
-              Parties: {c.parties.map((p) => `${p.name} (${p.role})`).join(", ")}
-            </div>
-          )}
-          {c.docket_url && (
-            <a
-              href={`https://www.courtlistener.com${c.docket_url}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-blue-500 hover:underline mt-1 inline-block"
-            >
-              View on CourtListener
-            </a>
-          )}
         </div>
       ))}
+    </div>
+  );
+}
+
+function CaseDetail({ caseData }: { caseData: CourtCase }) {
+  return (
+    <div className="bg-white rounded border border-gray-200 p-5">
+      <h2 className="text-lg font-bold text-gray-900 mb-4">
+        {caseData.case_title ?? "Untitled Case"}
+      </h2>
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+        <Dt label="Case ID" value={caseData.case_id} />
+        <Dt label="Court" value={caseData.court} />
+        <Dt label="Case Type" value={caseData.case_type} />
+        <Dt label="Filing Date" value={caseData.filing_date} />
+        <Dt label="Status" value={caseData.status} />
+      </dl>
+      {caseData.parties.length > 0 && (
+        <div className="mt-4">
+          <div className="text-xs font-medium text-gray-500 mb-2">Parties</div>
+          <div className="space-y-1">
+            {caseData.parties.map((p, i) => (
+              <div key={i} className="flex items-center gap-2 text-sm">
+                <span className="text-gray-900">{p.name ?? "Unknown"}</span>
+                {p.role && (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
+                    {p.role}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {caseData.docket_url && (
+        <div className="mt-4 pt-3 border-t border-gray-100">
+          <a
+            href={`https://www.courtlistener.com${caseData.docket_url}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-blue-600 hover:underline"
+          >
+            View full docket on CourtListener &rarr;
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Dt({ label, value }: { label: string; value: string | null }) {
+  if (!value) return null;
+  return (
+    <div>
+      <dt className="text-xs text-gray-500 font-medium">{label}</dt>
+      <dd className="text-gray-900 mt-0.5">{value}</dd>
     </div>
   );
 }
