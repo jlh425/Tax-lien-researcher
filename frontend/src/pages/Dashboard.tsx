@@ -1,11 +1,15 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { listParcels } from "../api/parcels";
 import { ParcelCard } from "../components/ParcelCard";
 import { ParcelDetailPane } from "../components/ParcelDetailPane";
 import { ScanForm } from "../components/ScanForm";
 import { QueueStatusBar } from "../components/QueueStatusBar";
+import { useAuthStore } from "../stores/authStore";
 export function Dashboard() {
+  const navigate = useNavigate();
+  const logout = useAuthStore((s) => s.logout);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filters, setFilters] = useState<{
     state?: string;
@@ -40,6 +44,12 @@ export function Dashboard() {
             className="bg-blue-600 text-white text-sm font-medium px-4 py-2 rounded hover:bg-blue-700 transition"
           >
             + New Scan
+          </button>
+          <button
+            onClick={() => { logout(); navigate("/login"); }}
+            className="text-gray-400 hover:text-gray-600 text-sm"
+          >
+            Sign Out
           </button>
         </div>
       </header>
