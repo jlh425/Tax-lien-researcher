@@ -88,6 +88,7 @@ class Settings(BaseSettings):
 
     # ── Comms ─────────────────────────────────────────────────────────────
     sendgrid_api_key: str | None = None
+    sendgrid_from_email: str = "noreply@aloha-research.com"
     twilio_account_sid: str | None = None
     twilio_auth_token: str | None = None
     twilio_phone_number: str | None = None

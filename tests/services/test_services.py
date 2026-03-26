@@ -642,3 +642,277 @@ def test_deps_service_factories_importable():
         get_notification_service, get_outreach_service,
         get_parcel_service, get_research_service,
     ])
+
+
+# ── OutreachService — SendGrid/Twilio dispatch ──────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_outreach_send_email_via_sendgrid():
+    """send_outreach dispatches email via SendGrid API."""
+    from aloha.services.outreach_service import OutreachService
+
+    session = AsyncMock()
+    entry = MagicMock()
+    entry.channel = "email"
+    entry.status = "approved"
+    entry.contact_value = "owner@example.com"
+    entry.subject = "Tax Lien Notice"
+    entry.message_body = "Hello, we have a lien opportunity."
+    session.get.return_value = entry
+
+    mock_settings = MagicMock()
+    mock_settings.sendgrid_api_key = "SG.test-key"
+    mock_settings.sendgrid_from_email = "noreply@aloha.com"
+
+    mock_response = MagicMock()
+    mock_response.headers = {"X-Message-Id": "msg-abc123"}
+    mock_response.raise_for_status = MagicMock()
+
+    with (
+        patch("aloha.services.outreach_service.settings", mock_settings, create=True),
+        patch("aloha.config.settings", mock_settings),
+        patch("httpx.AsyncClient") as MockClient,
+    ):
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post = AsyncMock(return_value=mock_response)
+        mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+        mock_client_instance.__aexit__ = AsyncMock(return_value=None)
+        MockClient.return_value = mock_client_instance
+
+        svc = OutreachService(session)
+        await svc.send_outreach(42)
+
+    assert entry.status == "sent"
+    assert entry.provider == "sendgrid"
+    assert entry.provider_msg_id == "msg-abc123"
+    mock_client_instance.post.assert_awaited_once()
+    call_kwargs = mock_client_instance.post.call_args
+    assert "sendgrid" in call_kwargs[0][0] or "sendgrid" in str(call_kwargs)
+
+
+@pytest.mark.asyncio
+async def test_outreach_send_sms_via_twilio():
+    """send_outreach dispatches SMS via Twilio API."""
+    from aloha.services.outreach_service import OutreachService
+
+    session = AsyncMock()
+    entry = MagicMock()
+    entry.channel = "sms"
+    entry.status = "approved"
+    entry.contact_value = "+15551234567"
+    entry.subject = None
+    entry.message_body = "Your lien opportunity is ready."
+    session.get.return_value = entry
+
+    mock_settings = MagicMock()
+    mock_settings.twilio_account_sid = "ACtest123"
+    mock_settings.twilio_auth_token = "auth-token-xyz"
+    mock_settings.twilio_phone_number = "+15559876543"
+
+    mock_response = MagicMock()
+    mock_response.json.return_value = {"sid": "SM_test_sid"}
+    mock_response.raise_for_status = MagicMock()
+
+    with (
+        patch("aloha.config.settings", mock_settings),
+        patch("httpx.AsyncClient") as MockClient,
+    ):
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post = AsyncMock(return_value=mock_response)
+        mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+        mock_client_instance.__aexit__ = AsyncMock(return_value=None)
+        MockClient.return_value = mock_client_instance
+
+        svc = OutreachService(session)
+        await svc.send_outreach(43)
+
+    assert entry.status == "sent"
+    assert entry.provider == "twilio"
+    assert entry.provider_msg_id == "SM_test_sid"
+
+
+@pytest.mark.asyncio
+async def test_outreach_send_email_no_api_key_falls_back_to_stub():
+    """send_outreach falls back to stub when SendGrid key is missing."""
+    from aloha.services.outreach_service import OutreachService
+
+    session = AsyncMock()
+    entry = MagicMock()
+    entry.channel = "email"
+    entry.status = "approved"
+    entry.contact_value = "owner@example.com"
+    entry.subject = "Test"
+    entry.message_body = "Body"
+    session.get.return_value = entry
+
+    mock_settings = MagicMock()
+    mock_settings.sendgrid_api_key = None
+    mock_settings.sendgrid_from_email = "noreply@aloha.com"
+
+    with patch("aloha.config.settings", mock_settings):
+        svc = OutreachService(session)
+        await svc.send_outreach(44)
+
+    assert entry.status == "sent"
+    assert entry.provider == "sendgrid"
+    assert entry.provider_msg_id == "stub_no_sendgrid_key"
+
+
+@pytest.mark.asyncio
+async def test_outreach_send_sms_no_twilio_creds_falls_back():
+    """send_outreach falls back to stub when Twilio creds are missing."""
+    from aloha.services.outreach_service import OutreachService
+
+    session = AsyncMock()
+    entry = MagicMock()
+    entry.channel = "sms"
+    entry.status = "approved"
+    entry.contact_value = "+15551234567"
+    entry.message_body = "Body"
+    session.get.return_value = entry
+
+    mock_settings = MagicMock()
+    mock_settings.twilio_account_sid = None
+    mock_settings.twilio_auth_token = None
+    mock_settings.twilio_phone_number = None
+
+    with patch("aloha.config.settings", mock_settings):
+        svc = OutreachService(session)
+        await svc.send_outreach(45)
+
+    assert entry.status == "sent"
+    assert entry.provider == "twilio"
+    assert entry.provider_msg_id == "stub_no_twilio_creds"
+
+
+@pytest.mark.asyncio
+async def test_outreach_send_unsupported_channel():
+    """send_outreach uses stub for unsupported channels."""
+    from aloha.services.outreach_service import OutreachService
+
+    session = AsyncMock()
+    entry = MagicMock()
+    entry.channel = "carrier_pigeon"
+    entry.status = "approved"
+    entry.contact_value = "loft-42"
+    entry.message_body = "Urgent"
+    session.get.return_value = entry
+
+    mock_settings = MagicMock()
+    with patch("aloha.config.settings", mock_settings):
+        svc = OutreachService(session)
+        await svc.send_outreach(46)
+
+    assert entry.provider == "stub"
+    assert "stub_46" in entry.provider_msg_id
+
+
+@pytest.mark.asyncio
+async def test_outreach_send_not_approved_raises():
+    """send_outreach raises ValueError if entry is not approved."""
+    from aloha.services.outreach_service import OutreachService
+
+    session = AsyncMock()
+    entry = MagicMock()
+    entry.status = "pending"
+    session.get.return_value = entry
+
+    svc = OutreachService(session)
+    with pytest.raises(ValueError, match="not approved"):
+        await svc.send_outreach(47)
+
+
+@pytest.mark.asyncio
+async def test_outreach_send_not_found_raises():
+    """send_outreach raises ValueError if entry doesn't exist."""
+    from aloha.services.outreach_service import OutreachService
+
+    session = AsyncMock()
+    session.get.return_value = None
+
+    svc = OutreachService(session)
+    with pytest.raises(ValueError, match="not found"):
+        await svc.send_outreach(99)
+
+
+# ── NotificationService — SendGrid email ────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_notification_send_scan_complete_via_sendgrid():
+    """send_scan_complete sends email via SendGrid when configured."""
+    from aloha.services.notification_service import NotificationService
+
+    session = AsyncMock()
+    mock_settings = MagicMock()
+    mock_settings.sendgrid_api_key = "SG.test-key"
+    mock_settings.sendgrid_from_email = "noreply@aloha.com"
+
+    mock_response = MagicMock()
+    mock_response.headers = {"X-Message-Id": "msg-scan-123"}
+    mock_response.raise_for_status = MagicMock()
+
+    with (
+        patch("aloha.config.settings", mock_settings),
+        patch("httpx.AsyncClient") as MockClient,
+    ):
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post = AsyncMock(return_value=mock_response)
+        mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+        mock_client_instance.__aexit__ = AsyncMock(return_value=None)
+        MockClient.return_value = mock_client_instance
+
+        svc = NotificationService(session)
+        await svc.send_scan_complete("user@example.com", "FL", "orange", 42)
+
+    mock_client_instance.post.assert_awaited_once()
+    call_args = mock_client_instance.post.call_args
+    payload = call_args.kwargs.get("json") or call_args[1].get("json")
+    assert "Orange County" in payload["subject"]
+    assert "42" in payload["content"][0]["value"]
+
+
+@pytest.mark.asyncio
+async def test_notification_send_scan_complete_no_api_key():
+    """send_scan_complete falls back to log-only when no API key."""
+    from aloha.services.notification_service import NotificationService
+
+    session = AsyncMock()
+    mock_settings = MagicMock()
+    mock_settings.sendgrid_api_key = None
+
+    with (
+        patch("aloha.config.settings", mock_settings),
+        patch("httpx.AsyncClient") as MockClient,
+    ):
+        svc = NotificationService(session)
+        await svc.send_scan_complete("user@example.com", "FL", "orange", 10)
+
+    # Should not have attempted to create an HTTP client
+    MockClient.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_notification_send_scan_complete_handles_http_error():
+    """send_scan_complete catches HTTP errors gracefully."""
+    from aloha.services.notification_service import NotificationService
+
+    session = AsyncMock()
+    mock_settings = MagicMock()
+    mock_settings.sendgrid_api_key = "SG.test-key"
+    mock_settings.sendgrid_from_email = "noreply@aloha.com"
+
+    with (
+        patch("aloha.config.settings", mock_settings),
+        patch("httpx.AsyncClient") as MockClient,
+    ):
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post = AsyncMock(side_effect=Exception("Connection refused"))
+        mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+        mock_client_instance.__aexit__ = AsyncMock(return_value=None)
+        MockClient.return_value = mock_client_instance
+
+        svc = NotificationService(session)
+        # Should not raise — error is caught internally
+        await svc.send_scan_complete("user@example.com", "FL", "orange", 5)

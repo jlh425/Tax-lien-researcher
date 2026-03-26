@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import base64
 from datetime import datetime, timedelta, timezone
 
+import httpx
 from jinja2 import Environment
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from aloha.core.exceptions import OutreachBlockedError
 from aloha.db.models.outreach import DoNotContact, OutreachLog, OutreachTemplate
 from aloha.services.base import BaseService
+
+_SENDGRID_SEND_URL = "https://api.sendgrid.com/v3/mail/send"
+_TWILIO_BASE_URL = "https://api.twilio.com/2010-04-01"
+_HTTP_TIMEOUT = 15.0
 
 _FREQUENCY_CAP_DAYS = 14
 
@@ -126,10 +132,10 @@ class OutreachService(BaseService):
         self.log.info("outreach_approved", outreach_id=outreach_log_id)
 
     async def send_outreach(self, outreach_log_id: int) -> None:
-        """Send an approved outreach message (SendGrid/Twilio stub).
+        """Send an approved outreach message via SendGrid (email) or Twilio (SMS).
 
-        In production, this dispatches to the appropriate provider based on
-        the outreach channel. Currently logs the attempt as a stub.
+        Dispatches to the appropriate provider based on the outreach channel.
+        Falls back to stub mode if API keys are not configured.
         """
         entry = await self._session.get(OutreachLog, outreach_log_id)
         if entry is None:
@@ -137,18 +143,120 @@ class OutreachService(BaseService):
         if entry.status != "approved":
             raise ValueError(f"OutreachLog {outreach_log_id} is not approved (status={entry.status})")
 
-        # Stub: mark as sent
+        from aloha.config import settings
+
+        if entry.channel == "email":
+            provider_msg_id = await self._send_email(
+                settings=settings,
+                to_email=entry.contact_value,
+                subject=entry.subject or "(No subject)",
+                body=entry.message_body or "",
+            )
+            entry.provider = "sendgrid"
+        elif entry.channel in ("sms", "voicemail"):
+            provider_msg_id = await self._send_sms(
+                settings=settings,
+                to_phone=entry.contact_value,
+                body=entry.message_body or "",
+            )
+            entry.provider = "twilio"
+        else:
+            # Unsupported channel — mark as stub
+            self.log.warning("unsupported_channel", channel=entry.channel)
+            provider_msg_id = f"stub_{outreach_log_id}"
+            entry.provider = "stub"
+
         entry.status = "sent"
         entry.sent_at = datetime.now(tz=timezone.utc)
-        entry.provider = "stub"
-        entry.provider_msg_id = f"stub_{outreach_log_id}"
+        entry.provider_msg_id = provider_msg_id
         await self._session.flush()
 
         self.log.info(
-            "outreach_sent_stub",
+            "outreach_sent",
             outreach_id=outreach_log_id,
             channel=entry.channel,
+            provider=entry.provider,
         )
+
+    # ── Provider dispatch ─────────────────────────────────────────────
+
+    async def _send_email(
+        self,
+        *,
+        settings: object,
+        to_email: str,
+        subject: str,
+        body: str,
+    ) -> str:
+        """Send an email via the SendGrid v3 Mail Send API.
+
+        Returns the provider message ID. Falls back to stub if API key
+        is not configured.
+        """
+        api_key = getattr(settings, "sendgrid_api_key", None)
+        if not api_key:
+            self.log.warning("sendgrid_not_configured, using stub")
+            return "stub_no_sendgrid_key"
+
+        from_email = getattr(settings, "sendgrid_from_email", "noreply@aloha-research.com")
+        payload = {
+            "personalizations": [{"to": [{"email": to_email}]}],
+            "from": {"email": from_email},
+            "subject": subject,
+            "content": [{"type": "text/plain", "value": body}],
+        }
+
+        async with httpx.AsyncClient(timeout=httpx.Timeout(_HTTP_TIMEOUT)) as client:
+            response = await client.post(
+                _SENDGRID_SEND_URL,
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+            )
+            response.raise_for_status()
+
+        # SendGrid returns the message ID in the X-Message-Id header
+        msg_id = response.headers.get("X-Message-Id", "")
+        self.log.info("email_sent", to=to_email, message_id=msg_id)
+        return msg_id
+
+    async def _send_sms(
+        self,
+        *,
+        settings: object,
+        to_phone: str,
+        body: str,
+    ) -> str:
+        """Send an SMS via the Twilio REST API.
+
+        Returns the provider message SID. Falls back to stub if
+        credentials are not configured.
+        """
+        account_sid = getattr(settings, "twilio_account_sid", None)
+        auth_token = getattr(settings, "twilio_auth_token", None)
+        from_phone = getattr(settings, "twilio_phone_number", None)
+
+        if not all([account_sid, auth_token, from_phone]):
+            self.log.warning("twilio_not_configured, using stub")
+            return "stub_no_twilio_creds"
+
+        url = f"{_TWILIO_BASE_URL}/Accounts/{account_sid}/Messages.json"
+        auth = base64.b64encode(f"{account_sid}:{auth_token}".encode()).decode()
+
+        async with httpx.AsyncClient(timeout=httpx.Timeout(_HTTP_TIMEOUT)) as client:
+            response = await client.post(
+                url,
+                data={"To": to_phone, "From": from_phone, "Body": body},
+                headers={"Authorization": f"Basic {auth}"},
+            )
+            response.raise_for_status()
+
+        result = response.json()
+        sid = result.get("sid", "")
+        self.log.info("sms_sent", to=to_phone, sid=sid)
+        return sid
 
     # ── Template rendering ───────────────────────────────────────────────
 
