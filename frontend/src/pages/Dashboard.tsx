@@ -30,6 +30,8 @@ export function Dashboard() {
         <nav className="flex gap-4 ml-8 text-sm">
           <a href="/court-records" className="text-gray-500 hover:text-blue-600 transition">Court Records</a>
           <a href="/ucc" className="text-gray-500 hover:text-blue-600 transition">UCC Filings</a>
+          <a href="/queue" className="text-gray-500 hover:text-blue-600 transition">Queue</a>
+          <a href="/settings" className="text-gray-500 hover:text-blue-600 transition">Settings</a>
         </nav>
         <div className="flex gap-3 items-center ml-auto">
           <QueueStatusBar />
