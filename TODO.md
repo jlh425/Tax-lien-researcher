@@ -2,19 +2,19 @@
 
 ## Tier 1 — Blocking (core functionality gaps)
 
-- [ ] **OCR for scanned PDFs** — `src/aloha/pdf/pipeline.py` `extract_scanned_text()` is a stub; integrate Tesseract or cloud OCR
-- [ ] **GIS parcel boundary** — `src/aloha/mcp_servers/gis/server.py` `get_parcel_boundary()` returns stub data; implement ArcGIS geometry retrieval
-- [ ] **Email/SMS outreach** — `src/aloha/services/outreach_service.py` + `notification_service.py` use stub providers; wire real SendGrid/Twilio dispatch
-- [ ] **Stripe billing** — `src/aloha/services/billing_service.py` returns mock customer IDs and webhook handler is a no-op; implement real Stripe integration
-- [ ] **County assessor owner search** — `src/aloha/mcp_servers/county_assessor/server.py` `search_by_owner()` is a stub; implement name-based search via scrapers
+- [x] **OCR for scanned PDFs** — PyMuPDF 300 DPI rendering + pytesseract (commit `02e88c5`)
+- [x] **GIS parcel boundary** — ArcGIS Esri rings → GeoJSON Polygon (commit `c37a77a`)
+- [x] **Email/SMS outreach** — SendGrid v3 + Twilio REST via httpx (commit `3664559`)
+- [x] **Stripe billing** — Real Stripe SDK: customers, checkout, webhooks (commit `e0a0729`)
+- [x] **County assessor owner search** — ArcGIS multi-alias owner query cascade (commit `33a798e`)
 
 ## Tier 2 — High value (tests & integration)
 
-- [ ] **Service tests** — Only 1 test file for 9 services; add tests for billing, notification, outreach, auth, parcel, export services
-- [ ] **API route tests** — Parcels, scan, and auth routes have no tests
-- [ ] **Frontend component tests** — Dashboard, ScanForm, ParcelCard, ParcelDetailPane, QueueStatusBar untested
-- [ ] **CI/CD** — No GitHub Actions workflows; add automated testing, linting, and deploy pipelines
-- [ ] **End-to-end MCP server integration tests** — Verify CourtListener & Cobalt APIs work with real keys
+- [x] **Service tests** — 51 tests covering all 9 services (billing, notification, outreach, auth, parcel, export, research, base, deps)
+- [x] **API route tests** — 18 tests for auth, scan, and parcels routes (commit `70d4a8f`)
+- [x] **Frontend component tests** — 42 total: Dashboard, ScanForm, ParcelCard, QueueStatusBar (commit `3ad5353`)
+- [x] **CI/CD** — GitHub Actions: backend (ruff + mypy + pytest) + frontend (tsc + vitest + build) (commit `a46bf2d`)
+- [x] **End-to-end MCP server integration tests** — 7 tests for CourtListener, Cobalt, Google Maps (commit `1006721`)
 
 ## Tier 3 — Polish
 
