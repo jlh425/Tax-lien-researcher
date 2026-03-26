@@ -18,7 +18,7 @@
 
 ## Tier 3 — Polish
 
-- [ ] **Docker health checks & resource limits** — Add health checks and memory/CPU constraints to docker-compose
-- [ ] **Missing frontend pages** — Settings/profile page, queue history page
-- [ ] **`.env.example` completeness** — Missing `stripe_publishable_key`, Smarty credentials, Mapbox key
-- [ ] **Login/auth UI** — No frontend authentication page exists
+- [x] **Docker health checks & resource limits** — postgres/redis/backend/frontend health checks + memory/CPU limits (commit `37d15f6`)
+- [x] **Missing frontend pages** — Settings (profile, subscription, API keys) + Queue History (status cards, agent breakdown) (commit `e5a5975`)
+- [x] **`.env.example` completeness** — Added all missing keys: Stripe, SendGrid, Cobalt, Maps, Captcha (commit `3ee64a4`)
+- [x] **Login/auth UI** — Login/register page, Zustand auth store, route protection, Sign Out (commit `44cc956`)
