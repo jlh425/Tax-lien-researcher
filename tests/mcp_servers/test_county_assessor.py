@@ -125,11 +125,87 @@ class TestSuccessPaths:
         assert len(result["parcels"]) == 1
 
     @pytest.mark.asyncio
-    async def test_search_by_owner_returns_stub(self) -> None:
+    async def test_search_by_owner_arcgis_success(self) -> None:
         server = CountyAssessorMCPServer()
-        result = await server.search_by_owner("Doe", "FL", "orange")
-        assert result["stub"] is True
+        mock_scraper = MagicMock()
+        mock_scraper._query = AsyncMock(return_value={
+            "features": [
+                {
+                    "attributes": {"APN": "111", "OWNER": "DOE JOHN", "SITUS_ADDR": "123 Main"},
+                    "geometry": {"x": -81.38, "y": 28.54},
+                },
+                {
+                    "attributes": {"APN": "222", "OWNER": "DOE JANE", "SITUS_ADDR": "456 Oak"},
+                    "geometry": {"x": -81.39, "y": 28.55},
+                },
+            ]
+        })
+        mock_scraper._normalise = MagicMock(side_effect=lambda f: {
+            "parcel_id": f["attributes"]["APN"],
+            "owner_of_record": f["attributes"]["OWNER"],
+        })
+        mock_scraper.close = AsyncMock()
+
+        with (
+            patch(
+                "aloha.agents.parcel_research.tools._ARCGIS_ENDPOINTS",
+                {("FL", "orange"): "https://example.com/arcgis"},
+            ),
+            patch(
+                "aloha.scrapers.tier1_apis.arcgis.ArcGISParcelScraper",
+                return_value=mock_scraper,
+            ),
+        ):
+            result = await server.search_by_owner("Doe", "FL", "orange")
+        assert len(result["parcels"]) == 2
+        assert result["parcels"][0]["owner_of_record"] == "DOE JOHN"
+
+    @pytest.mark.asyncio
+    async def test_search_by_owner_no_scraper(self) -> None:
+        server = CountyAssessorMCPServer()
+        with (
+            patch("aloha.agents.parcel_research.tools._ARCGIS_ENDPOINTS", {}),
+            patch("aloha.scrapers.tier2_vendors.qpublic.get_qpublic_scraper", return_value=None),
+            patch("aloha.scrapers.tier2_vendors.tyler.get_eagleweb_scraper", return_value=None),
+        ):
+            result = await server.search_by_owner("Doe", "ZZ", "nowhere")
+        assert "error" in result
         assert result["parcels"] == []
+
+    @pytest.mark.asyncio
+    async def test_search_by_owner_arcgis_no_results_tries_aliases(self) -> None:
+        """When first owner field returns nothing, tries next alias."""
+        server = CountyAssessorMCPServer()
+        call_count = 0
+
+        async def mock_query(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            # Return empty for first alias, results for second
+            if call_count == 1:
+                return {"features": []}
+            return {"features": [
+                {"attributes": {"APN": "333", "OWN_NAME": "DOE"}, "geometry": {"x": -81, "y": 28}},
+            ]}
+
+        mock_scraper = MagicMock()
+        mock_scraper._query = AsyncMock(side_effect=mock_query)
+        mock_scraper._normalise = MagicMock(return_value={"parcel_id": "333", "owner_of_record": "DOE"})
+        mock_scraper.close = AsyncMock()
+
+        with (
+            patch(
+                "aloha.agents.parcel_research.tools._ARCGIS_ENDPOINTS",
+                {("FL", "orange"): "https://example.com/arcgis"},
+            ),
+            patch(
+                "aloha.scrapers.tier1_apis.arcgis.ArcGISParcelScraper",
+                return_value=mock_scraper,
+            ),
+        ):
+            result = await server.search_by_owner("Doe", "FL", "orange")
+        assert len(result["parcels"]) == 1
+        assert call_count >= 2
 
 
 # -- Error Paths ---------------------------------------------------------------
