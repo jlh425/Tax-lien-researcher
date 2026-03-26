@@ -284,6 +284,233 @@ async def test_billing_check_quota_unlimited():
     session.execute.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+async def test_billing_create_customer_with_stripe():
+    """create_customer calls Stripe API and persists customer ID."""
+    from aloha.services.billing_service import BillingService
+
+    session = AsyncMock()
+    mock_user = MagicMock()
+    session.get.return_value = mock_user
+
+    mock_customer = MagicMock()
+    mock_customer.id = "cus_real_abc123"
+
+    mock_client = MagicMock()
+    mock_client.customers.create.return_value = mock_customer
+
+    mock_settings = MagicMock()
+    mock_settings.stripe_secret_key = "sk_test_xxx"
+
+    with (
+        patch("aloha.config.settings", mock_settings),
+        patch("stripe.StripeClient", return_value=mock_client),
+    ):
+        svc = BillingService(session)
+        result = await svc.create_customer("user-123", "test@example.com")
+
+    assert result == "cus_real_abc123"
+    assert mock_user.stripe_customer_id == "cus_real_abc123"
+    session.flush.assert_awaited_once()
+    mock_client.customers.create.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_billing_create_customer_no_stripe_key():
+    """create_customer returns stub ID when Stripe is not configured."""
+    from aloha.services.billing_service import BillingService
+
+    session = AsyncMock()
+    mock_settings = MagicMock()
+    mock_settings.stripe_secret_key = None
+
+    with patch("aloha.config.settings", mock_settings):
+        svc = BillingService(session)
+        result = await svc.create_customer("user-123", "test@example.com")
+
+    assert result.startswith("cus_stub_")
+
+
+@pytest.mark.asyncio
+async def test_billing_create_customer_stripe_error():
+    """create_customer raises BillingError on Stripe failures."""
+    import stripe as stripe_mod
+
+    from aloha.core.exceptions import BillingError
+    from aloha.services.billing_service import BillingService
+
+    session = AsyncMock()
+    mock_client = MagicMock()
+    mock_client.customers.create.side_effect = stripe_mod.StripeError("API down")
+
+    mock_settings = MagicMock()
+    mock_settings.stripe_secret_key = "sk_test_xxx"
+
+    with (
+        patch("aloha.config.settings", mock_settings),
+        patch("stripe.StripeClient", return_value=mock_client),
+    ):
+        svc = BillingService(session)
+        with pytest.raises(BillingError, match="Failed to create"):
+            await svc.create_customer("user-123", "test@example.com")
+
+
+@pytest.mark.asyncio
+async def test_billing_create_checkout_session():
+    """create_checkout_session returns the Stripe session URL."""
+    from aloha.services.billing_service import BillingService
+
+    session = AsyncMock()
+    mock_user = MagicMock()
+    mock_user.stripe_customer_id = "cus_existing"
+    session.get.return_value = mock_user
+
+    mock_stripe_session = MagicMock()
+    mock_stripe_session.id = "cs_test_123"
+    mock_stripe_session.url = "https://checkout.stripe.com/pay/cs_test_123"
+
+    mock_client = MagicMock()
+    mock_client.checkout.sessions.create.return_value = mock_stripe_session
+
+    mock_settings = MagicMock()
+    mock_settings.stripe_secret_key = "sk_test_xxx"
+
+    with (
+        patch("aloha.config.settings", mock_settings),
+        patch("stripe.StripeClient", return_value=mock_client),
+    ):
+        svc = BillingService(session)
+        url = await svc.create_checkout_session(
+            "user-123", "price_pro_monthly",
+            "https://app.aloha.com/success", "https://app.aloha.com/cancel",
+        )
+
+    assert url == "https://checkout.stripe.com/pay/cs_test_123"
+    call_params = mock_client.checkout.sessions.create.call_args.kwargs["params"]
+    assert call_params["customer"] == "cus_existing"
+    assert call_params["mode"] == "subscription"
+
+
+@pytest.mark.asyncio
+async def test_billing_create_checkout_no_stripe_key():
+    """create_checkout_session returns stub URL when not configured."""
+    from aloha.services.billing_service import BillingService
+
+    session = AsyncMock()
+    mock_settings = MagicMock()
+    mock_settings.stripe_secret_key = None
+
+    with patch("aloha.config.settings", mock_settings):
+        svc = BillingService(session)
+        url = await svc.create_checkout_session(
+            "user-123", "price_x", "http://ok", "http://cancel",
+        )
+
+    assert "stub.stripe.com" in url
+
+
+@pytest.mark.asyncio
+async def test_billing_webhook_checkout_completed():
+    """handle_webhook upgrades user tier on checkout.session.completed."""
+    from aloha.services.billing_service import BillingService
+
+    session = AsyncMock()
+    mock_user = MagicMock()
+    mock_user.tier = "free"
+    session.get.return_value = mock_user
+
+    mock_event = MagicMock()
+    mock_event.type = "checkout.session.completed"
+    mock_event.data.object.metadata = {"aloha_user_id": "user-123"}
+    mock_event.data.object.customer = "cus_new"
+
+    mock_settings = MagicMock()
+    mock_settings.stripe_secret_key = "sk_test_xxx"
+    mock_settings.stripe_webhook_secret = "whsec_test"
+
+    with (
+        patch("aloha.config.settings", mock_settings),
+        patch("stripe.Webhook.construct_event", return_value=mock_event),
+    ):
+        svc = BillingService(session)
+        await svc.handle_webhook(b"raw-payload", "sig-header")
+
+    assert mock_user.tier == "pro"
+    assert mock_user.stripe_customer_id == "cus_new"
+
+
+@pytest.mark.asyncio
+async def test_billing_webhook_subscription_deleted():
+    """handle_webhook downgrades user on customer.subscription.deleted."""
+    from aloha.services.billing_service import BillingService
+
+    session = AsyncMock()
+    mock_user = MagicMock()
+    mock_user.tier = "pro"
+    mock_user.id = uuid.uuid4()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.first.return_value = mock_user
+    session.execute.return_value = mock_result
+
+    mock_event = MagicMock()
+    mock_event.type = "customer.subscription.deleted"
+    mock_event.data.object.customer = "cus_existing"
+
+    mock_settings = MagicMock()
+    mock_settings.stripe_secret_key = "sk_test_xxx"
+    mock_settings.stripe_webhook_secret = "whsec_test"
+
+    with (
+        patch("aloha.config.settings", mock_settings),
+        patch("stripe.Webhook.construct_event", return_value=mock_event),
+    ):
+        svc = BillingService(session)
+        await svc.handle_webhook(b"raw-payload", "sig-header")
+
+    assert mock_user.tier == "free"
+
+
+@pytest.mark.asyncio
+async def test_billing_webhook_invalid_signature():
+    """handle_webhook raises BillingError on invalid signature."""
+    import stripe as stripe_mod
+
+    from aloha.core.exceptions import BillingError
+    from aloha.services.billing_service import BillingService
+
+    session = AsyncMock()
+    mock_settings = MagicMock()
+    mock_settings.stripe_secret_key = "sk_test_xxx"
+    mock_settings.stripe_webhook_secret = "whsec_test"
+
+    with (
+        patch("aloha.config.settings", mock_settings),
+        patch(
+            "stripe.Webhook.construct_event",
+            side_effect=stripe_mod.SignatureVerificationError("bad sig", "header"),
+        ),
+    ):
+        svc = BillingService(session)
+        with pytest.raises(BillingError, match="Invalid webhook"):
+            await svc.handle_webhook(b"bad-payload", "bad-sig")
+
+
+@pytest.mark.asyncio
+async def test_billing_webhook_no_stripe_config():
+    """handle_webhook is a no-op when Stripe is not configured."""
+    from aloha.services.billing_service import BillingService
+
+    session = AsyncMock()
+    mock_settings = MagicMock()
+    mock_settings.stripe_secret_key = None
+    mock_settings.stripe_webhook_secret = None
+
+    with patch("aloha.config.settings", mock_settings):
+        svc = BillingService(session)
+        # Should not raise
+        await svc.handle_webhook(b"anything", "any-sig")
+
+
 # ── ResearchService ──────────────────────────────────────────────────────────
 
 
