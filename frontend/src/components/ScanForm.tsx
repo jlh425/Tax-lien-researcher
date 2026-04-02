@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { triggerScan } from "../api/parcels";
+import { US_STATES, COUNTIES_BY_STATE } from "../data/us-counties";
 
 interface Props {
   onClose: () => void;
@@ -9,11 +10,40 @@ interface Props {
 export function ScanForm({ onClose, onSuccess }: Props) {
   const [state, setState] = useState("");
   const [county, setCounty] = useState("");
+  const [countySearch, setCountySearch] = useState("");
+  const [showCountyDropdown, setShowCountyDropdown] = useState(false);
   const [instrumentFilter, setInstrumentFilter] = useState("");
   const [maxRecords, setMaxRecords] = useState("5000");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
+
+  const countyRef = useRef<HTMLDivElement>(null);
+
+  // Filter counties based on selected state and search text
+  const filteredCounties = useMemo(() => {
+    const counties = COUNTIES_BY_STATE[state] || [];
+    if (!countySearch) return counties;
+    const q = countySearch.toLowerCase();
+    return counties.filter((c) => c.toLowerCase().includes(q));
+  }, [state, countySearch]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (countyRef.current && !countyRef.current.contains(e.target as Node)) {
+        setShowCountyDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  // Reset county when state changes
+  useEffect(() => {
+    setCounty("");
+    setCountySearch("");
+  }, [state]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -52,33 +82,72 @@ export function ScanForm({ onClose, onSuccess }: Props) {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* State dropdown */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 State <span className="text-red-500">*</span>
               </label>
-              <input
-                type="text"
+              <select
                 value={state}
                 onChange={(e) => setState(e.target.value)}
-                placeholder="e.g. FL"
-                maxLength={2}
                 required
                 className="w-full border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
-              />
+              >
+                <option value="">Select a state…</option>
+                {US_STATES.map((s) => (
+                  <option key={s.code} value={s.code}>
+                    {s.name} ({s.code})
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <div>
+            {/* County combobox */}
+            <div ref={countyRef} className="relative">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 County <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
-                value={county}
-                onChange={(e) => setCounty(e.target.value)}
-                placeholder="e.g. orange"
+                value={countySearch || county}
+                onChange={(e) => {
+                  setCountySearch(e.target.value);
+                  setCounty("");
+                  setShowCountyDropdown(true);
+                }}
+                onFocus={() => state && setShowCountyDropdown(true)}
+                placeholder={state ? "Start typing a county…" : "Select a state first"}
+                disabled={!state}
                 required
-                className="w-full border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+                className="w-full border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50 disabled:text-gray-400"
               />
+              {showCountyDropdown && state && filteredCounties.length > 0 && (
+                <ul className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow-lg max-h-48 overflow-y-auto">
+                  {filteredCounties.slice(0, 50).map((c) => (
+                    <li
+                      key={c}
+                      onClick={() => {
+                        setCounty(c);
+                        setCountySearch(c);
+                        setShowCountyDropdown(false);
+                      }}
+                      className="px-3 py-1.5 text-sm cursor-pointer hover:bg-blue-50 hover:text-blue-700"
+                    >
+                      {c}
+                    </li>
+                  ))}
+                  {filteredCounties.length > 50 && (
+                    <li className="px-3 py-1.5 text-xs text-gray-400">
+                      Type more to narrow results…
+                    </li>
+                  )}
+                </ul>
+              )}
+              {showCountyDropdown && state && countySearch && filteredCounties.length === 0 && (
+                <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded shadow-lg px-3 py-2 text-sm text-gray-400">
+                  No matching counties
+                </div>
+              )}
             </div>
 
             <div>

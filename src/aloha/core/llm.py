@@ -36,14 +36,16 @@ def _build_model(provider: str, model_name: str) -> Any:
             from pydantic_ai.models.anthropic import AnthropicModel
 
             if not settings.anthropic_api_key:
-                raise ValueError("ANTHROPIC_API_KEY is required when LLM_PROVIDER=anthropic")
+                log.warning("no_anthropic_api_key", model=model_name)
+                return None
             return AnthropicModel(model_name, api_key=settings.anthropic_api_key)
 
         case "openai":
             from pydantic_ai.models.openai import OpenAIModel
 
             if not settings.openai_api_key:
-                raise ValueError("OPENAI_API_KEY is required when LLM_PROVIDER=openai")
+                log.warning("no_openai_api_key", model=model_name)
+                return None
             return OpenAIModel(model_name, api_key=settings.openai_api_key)
 
         case "ollama":
@@ -59,17 +61,16 @@ def _build_model(provider: str, model_name: str) -> Any:
             from pydantic_ai.models.groq import GroqModel
 
             if not settings.groq_api_key:
-                raise ValueError("GROQ_API_KEY is required when LLM_PROVIDER=groq")
+                log.warning("no_groq_api_key", model=model_name)
+                return None
             return GroqModel(model_name, api_key=settings.groq_api_key)
 
         case "openai-compatible":
             from pydantic_ai.models.openai import OpenAIModel
 
             if not settings.openai_compatible_base_url:
-                raise ValueError(
-                    "OPENAI_COMPATIBLE_BASE_URL is required "
-                    "when LLM_PROVIDER=openai-compatible"
-                )
+                log.warning("no_openai_compatible_base_url", model=model_name)
+                return None
             return OpenAIModel(
                 model_name,
                 base_url=settings.openai_compatible_base_url,
@@ -120,3 +121,113 @@ def get_agent_model(agent_name: str) -> Any:
         model=model_name,
     )
     return _build_model(provider, model_name)
+
+
+# ── Per-user BYOK model resolution ───────────────────────────────────────────
+
+
+def _build_model_with_key(
+    provider: str,
+    model_name: str,
+    api_key: str | None = None,
+    base_url: str | None = None,
+) -> Any:
+    """Build a Pydantic AI model using an explicit API key (BYOK) or Ollama URL.
+
+    Unlike :func:`_build_model`, this does **not** read keys from env/settings.
+    Supports BYOK providers: anthropic, openai, groq, ollama.
+    """
+    match provider:
+        case "anthropic":
+            from pydantic_ai.models.anthropic import AnthropicModel
+
+            return AnthropicModel(model_name, api_key=api_key)
+
+        case "openai":
+            from pydantic_ai.models.openai import OpenAIModel
+
+            return OpenAIModel(model_name, api_key=api_key)
+
+        case "groq":
+            from pydantic_ai.models.groq import GroqModel
+
+            return GroqModel(model_name, api_key=api_key)
+
+        case "ollama":
+            from pydantic_ai.models.openai import OpenAIModel
+
+            ollama_url = base_url or "http://localhost:11434"
+            return OpenAIModel(
+                model_name,
+                base_url=f"{ollama_url.rstrip('/')}/v1",
+                api_key="ollama",
+            )
+
+        case _:
+            raise ValueError(f"BYOK not supported for provider: {provider!r}")
+
+
+async def resolve_user_model(
+    user_id: str | None,
+    agent_name: str | None = None,
+) -> Any | None:
+    """Return a per-user Pydantic AI model, or ``None`` to fall back to server key.
+
+    Opens its own short-lived DB session so it can be called from background
+    workers that don't have a request-scoped session.
+    """
+    if not user_id:
+        return None
+
+    from uuid import UUID
+
+    from aloha.db.engine import async_session_factory
+    from aloha.services.api_key_service import ApiKeyService
+
+    try:
+        async with async_session_factory() as session:
+            svc = ApiKeyService(session)
+            user = await svc._get_user(UUID(user_id))
+            user_settings: dict = user.settings or {}
+
+            preferred_provider: str | None = user_settings.get("llm_provider")
+            preferred_model: str | None = user_settings.get("llm_model")
+            llm_keys: dict = user_settings.get("llm_keys", {})
+
+            if not preferred_provider:
+                return None
+
+            # Ollama doesn't need an API key — just a base URL
+            if preferred_provider == "ollama":
+                model_name = preferred_model or "llama3.1:8b"
+                ollama_url = user_settings.get("ollama_base_url")
+                log.info(
+                    "resolved_user_model",
+                    user_id=user_id,
+                    provider="ollama",
+                    model=model_name,
+                    agent=agent_name,
+                )
+                return _build_model_with_key("ollama", model_name, base_url=ollama_url)
+
+            if preferred_provider not in llm_keys:
+                return None
+
+            api_key = await svc.get_decrypted_key(UUID(user_id), preferred_provider)
+            if not api_key:
+                return None
+
+            model_name = preferred_model or "claude-sonnet-4-20250514"
+
+            log.info(
+                "resolved_user_model",
+                user_id=user_id,
+                provider=preferred_provider,
+                model=model_name,
+                agent=agent_name,
+            )
+            return _build_model_with_key(preferred_provider, model_name, api_key)
+
+    except Exception:
+        log.warning("user_model_resolution_failed", user_id=user_id, agent=agent_name)
+        return None

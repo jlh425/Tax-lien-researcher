@@ -7,7 +7,7 @@ from typing import Any
 
 import structlog
 
-from aloha.core.llm import get_agent_model
+from aloha.core.llm import get_agent_model, resolve_user_model
 
 
 class BaseAgent(ABC):
@@ -65,6 +65,18 @@ class BaseAgent(ABC):
         """
         status = "complete" if success else "failed"
         self.log.info("releasing_queue_item", item_id=item_id, status=status)
+
+    async def get_user_model(self, context: dict[str, Any]) -> Any | None:
+        """Resolve a per-user LLM model from context, or return ``None``.
+
+        Call this in ``run()`` to honour BYOK keys::
+
+            model = (await self.get_user_model(ctx)) or self.model
+        """
+        user_id = context.get("user_id")
+        if not user_id:
+            return None
+        return await resolve_user_model(user_id, agent_name=self.name)
 
     async def handle_error(self, error: Exception, context: dict[str, Any]) -> None:
         """Centralised error handling hook.

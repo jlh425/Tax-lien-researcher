@@ -15,6 +15,7 @@ from aloha.api.routes.court_records import router as court_records_router
 from aloha.api.routes.health import router as health_router
 from aloha.api.routes.parcels import router as parcels_router
 from aloha.api.routes.scan import router as scan_router
+from aloha.api.routes.settings import router as settings_router
 from aloha.api.routes.ucc import router as ucc_router
 from aloha.config import settings
 from aloha.core.logging import configure_logging
@@ -72,6 +73,7 @@ def create_app() -> FastAPI:
     application.include_router(parcels_router, prefix="/api/v1")
     application.include_router(scan_router, prefix="/api/v1")
     application.include_router(court_records_router, prefix="/api/v1")
+    application.include_router(settings_router, prefix="/api/v1")
     application.include_router(ucc_router, prefix="/api/v1")
 
     return application

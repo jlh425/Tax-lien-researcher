@@ -1,11 +1,9 @@
-version: "3.9"
-
 services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: aloha-postgres
     ports:
-      - "5432:5432"
+      - "5433:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-aloha}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aloha_dev}
@@ -52,42 +50,33 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.backend
     container_name: aloha-backend
-    ports:
-      - "8000:8000"
+    network_mode: host
     env_file:
       - ../.env
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-aloha}:${POSTGRES_PASSWORD:-aloha_dev}@postgres:5432/${POSTGRES_DB:-aloha}
-      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-aloha}:${POSTGRES_PASSWORD:-aloha_dev}@localhost:5433/${POSTGRES_DB:-aloha}
+      REDIS_URL: redis://localhost:6379/0
     volumes:
       - ../src:/app/src
     command: uvicorn aloha.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/src
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\")' || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
       start_period: 15s
-    deploy:
-      resources:
-        limits:
-          memory: 2g
-          cpus: "2.0"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    networks:
-      - aloha-net
 
   frontend:
     build:
       context: ../frontend
       dockerfile: ../docker/Dockerfile.frontend
     container_name: aloha-frontend
-    ports:
-      - "5173:5173"
+    network_mode: host
     volumes:
       - ../frontend/src:/app/src
     healthcheck:
@@ -96,16 +85,9 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-    deploy:
-      resources:
-        limits:
-          memory: 512m
-          cpus: "0.5"
     depends_on:
       backend:
         condition: service_healthy
-    networks:
-      - aloha-net
 
 volumes:
   postgres_data:

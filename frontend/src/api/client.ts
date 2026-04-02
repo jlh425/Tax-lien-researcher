@@ -3,7 +3,7 @@ import axios from "axios";
 const TOKEN_KEY = "aloha_token";
 
 const client = axios.create({
-  baseURL: "/api",
+  baseURL: "/api/v1",
   headers: {
     "Content-Type": "application/json",
   },

@@ -21,6 +21,7 @@ node_modules/
 
 # Local storage
 data/
+!frontend/src/data/
 
 # Testing
 .pytest_cache/

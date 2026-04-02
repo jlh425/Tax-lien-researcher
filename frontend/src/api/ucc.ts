@@ -6,7 +6,7 @@ export async function searchUCCFilings(params: {
   state: string;
   filing_type?: string;
 }): Promise<UCCSearchResponse> {
-  const { data } = await client.get<UCCSearchResponse>("/v1/ucc/filings", { params });
+  const { data } = await client.get<UCCSearchResponse>("/ucc/filings", { params });
   return data;
 }
 
@@ -15,7 +15,7 @@ export async function getFilingDetails(
   state: string,
 ): Promise<UCCDetailResponse> {
   const { data } = await client.get<UCCDetailResponse>(
-    `/v1/ucc/filings/${encodeURIComponent(filingNumber)}`,
+    `/ucc/filings/${encodeURIComponent(filingNumber)}`,
     { params: { state } },
   );
   return data;

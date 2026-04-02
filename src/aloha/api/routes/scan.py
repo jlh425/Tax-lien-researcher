@@ -50,6 +50,7 @@ async def trigger_scan(
         county=body.county,
         instrument_filter=body.instrument_filter,
         max_records=body.max_records,
+        user_id=user_id,
     )
     return result
 
@@ -60,6 +61,7 @@ async def _run_discovery(
     county: str,
     instrument_filter: str | None,
     max_records: int,
+    user_id: str | None = None,
 ) -> None:
     """Background task — run the Discovery Agent."""
     from aloha.agents.discovery.agent import agent as discovery_agent
@@ -69,6 +71,7 @@ async def _run_discovery(
         "county": county,
         "instrument_filter": instrument_filter,
         "max_records": max_records,
+        "user_id": user_id,
     }
     try:
         await discovery_agent.run(context)

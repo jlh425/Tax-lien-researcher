@@ -6,12 +6,12 @@ export async function searchFederalCases(params: {
   state?: string;
   case_type?: string;
 }): Promise<CaseSearchResponse> {
-  const { data } = await client.get<CaseSearchResponse>("/v1/court-records/cases", { params });
+  const { data } = await client.get<CaseSearchResponse>("/court-records/cases", { params });
   return data;
 }
 
 export async function getCaseDetails(caseId: string): Promise<CourtCase> {
-  const { data } = await client.get<CourtCase>(`/v1/court-records/cases/${caseId}`);
+  const { data } = await client.get<CourtCase>(`/court-records/cases/${caseId}`);
   return data;
 }
 
@@ -20,6 +20,6 @@ export async function searchStateLiens(params: {
   state: string;
   lien_type?: string;
 }): Promise<LienSearchResponse> {
-  const { data } = await client.get<LienSearchResponse>("/v1/court-records/liens", { params });
+  const { data } = await client.get<LienSearchResponse>("/court-records/liens", { params });
   return data;
 }

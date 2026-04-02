@@ -11,21 +11,21 @@ export async function listParcels(params?: {
   limit?: number;
   offset?: number;
 }): Promise<ParcelSummary[]> {
-  const { data } = await client.get<ParcelSummary[]>("/v1/parcels", { params });
+  const { data } = await client.get<ParcelSummary[]>("/parcels", { params });
   return data;
 }
 
 export async function getParcel(parcelId: string): Promise<ParcelDetail> {
-  const { data } = await client.get<ParcelDetail>(`/v1/parcels/${parcelId}`);
+  const { data } = await client.get<ParcelDetail>(`/parcels/${parcelId}`);
   return data;
 }
 
 export async function triggerScan(body: ScanRequest): Promise<ScanResponse> {
-  const { data } = await client.post<ScanResponse>("/v1/run", body);
+  const { data } = await client.post<ScanResponse>("/run", body);
   return data;
 }
 
 export async function getQueueStatus(): Promise<QueueStatus> {
-  const { data } = await client.get<QueueStatus>("/v1/queue/status");
+  const { data } = await client.get<QueueStatus>("/queue/status");
   return data;
 }

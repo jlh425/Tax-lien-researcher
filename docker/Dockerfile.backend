@@ -14,12 +14,11 @@ RUN apt-get update && \
 WORKDIR /app
 
 # ---------- Dependencies ----------
-COPY pyproject.toml ./
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir .
-
-# ---------- Application ----------
+COPY pyproject.toml README.md ./
 COPY src/ ./src/
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir ".[all-llm]" \
+    "pydantic-ai-slim[anthropic,openai,groq]"
 
 EXPOSE 8000
 

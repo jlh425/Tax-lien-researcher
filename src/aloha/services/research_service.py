@@ -109,6 +109,7 @@ class ResearchService(BaseService):
         self,
         parcel_id: str,
         current_stage: str,
+        user_id: str | None = None,
     ) -> None:
         """Enqueue the next pipeline stage for a parcel."""
         stage_order = [
@@ -131,12 +132,14 @@ class ResearchService(BaseService):
             return
 
         next_stage = stage_order[idx + 1]
+        payload = {"user_id": user_id} if user_id else None
         item = QueueItem(
             parcel_id=parcel_id,
             agent_name=next_stage,
             stage=next_stage,
             priority=5,
             status="pending",
+            payload=payload,
             created_at=datetime.now(tz=timezone.utc),
             updated_at=datetime.now(tz=timezone.utc),
         )

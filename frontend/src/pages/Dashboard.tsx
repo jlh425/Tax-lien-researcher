@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { listParcels } from "../api/parcels";
+import { getLlmStatus } from "../api/settings";
 import { ParcelCard } from "../components/ParcelCard";
 import { ParcelDetailPane } from "../components/ParcelDetailPane";
 import { ScanForm } from "../components/ScanForm";
@@ -23,6 +24,13 @@ export function Dashboard() {
     queryKey: ["parcels", filters],
     queryFn: () => listParcels({ ...filters, limit: 200 }),
   });
+
+  const { data: llmStatus } = useQuery({
+    queryKey: ["llm-status"],
+    queryFn: getLlmStatus,
+  });
+
+  const needsSetup = llmStatus && !llmStatus.has_user_key && !llmStatus.has_server_llm;
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -53,6 +61,24 @@ export function Dashboard() {
           </button>
         </div>
       </header>
+
+      {/* LLM Setup Banner */}
+      {needsSetup && (
+        <div className="bg-amber-50 border-b border-amber-300 px-6 py-3 flex items-center gap-3">
+          <span className="text-amber-800 font-semibold text-sm">
+            LLM Configuration Required
+          </span>
+          <span className="text-amber-700 text-sm">
+            No AI provider is configured. Scanning and research features will not work until you add an API key or configure Ollama.
+          </span>
+          <a
+            href="/settings"
+            className="ml-auto bg-amber-600 text-white text-sm font-medium px-4 py-1.5 rounded hover:bg-amber-700 transition whitespace-nowrap"
+          >
+            Go to Settings
+          </a>
+        </div>
+      )}
 
       {/* Filter bar */}
       <div className="bg-white border-b border-gray-100 px-6 py-2 flex gap-4 text-sm">
