@@ -37,3 +37,15 @@ htmlcov/
 
 # Frontend build output
 frontend/dist/
+
+# Claude Memory Compiler — runtime state & user-specific data
+claude-memory-compiler/daily/
+claude-memory-compiler/knowledge/
+claude-memory-compiler/reports/
+claude-memory-compiler/scripts/state.json
+claude-memory-compiler/scripts/last-flush.json
+claude-memory-compiler/scripts/flush.log
+claude-memory-compiler/scripts/compile.log
+claude-memory-compiler/scripts/session-flush-*
+claude-memory-compiler/scripts/flush-context-*
+claude-memory-compiler/.venv/

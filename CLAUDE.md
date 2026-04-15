@@ -108,6 +108,17 @@ make test-cov                            # Tests with coverage report
 make format                              # Auto-fix lint issues
 ```
 
+### Memory Compiler
+- Conversations are auto-captured into `claude-memory-compiler/daily/` logs via Claude Code hooks
+- Knowledge is compiled into `claude-memory-compiler/knowledge/` articles (concepts, connections, Q&A)
+- SessionStart hook injects the knowledge base index into every new session
+- After 6 PM local time, daily logs auto-compile into structured knowledge articles
+- Manual commands (run from project root):
+  - `uv run --directory claude-memory-compiler python scripts/compile.py` — compile daily logs
+  - `uv run --directory claude-memory-compiler python scripts/query.py "question"` — query KB
+  - `uv run --directory claude-memory-compiler python scripts/lint.py --structural-only` — health checks
+- See `claude-memory-compiler/AGENTS.md` for full schema and technical reference
+
 ## Dependencies
 - See `pyproject.toml` for full list
 - `pip install -e ".[dev,anthropic]"` for development with Anthropic (default)
