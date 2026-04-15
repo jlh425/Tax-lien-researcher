@@ -9,12 +9,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from aloha.api.deps import get_db, require_user
 from aloha.api.schemas.settings import (
+    AddLlmRequest,
+    AddLlmResponse,
     ApiKeysResponse,
+    ConfiguredLlmOut,
+    ConfiguredLlmsResponse,
     DeleteApiKeyRequest,
+    DeleteLlmRequest,
     LlmPreferenceRequest,
     LlmStatusResponse,
     MessageResponse,
     SaveApiKeyRequest,
+    SetActiveLlmRequest,
+    TestLlmRequest,
+    TestLlmResponse,
 )
 from aloha.services.api_key_service import ApiKeyService
 
@@ -81,6 +89,11 @@ async def llm_status(
     data = await svc.get_keys_masked(user.id)
     has_user_key = len(data["keys"]) > 0 or data.get("llm_provider") == "ollama"
 
+    # Also consider configured_llms as having a user key
+    configured = await svc.get_configured_llms(user.id)
+    if configured:
+        has_user_key = True
+
     # Check if a server-level LLM is available
     has_server_llm = get_model() is not None
 
@@ -89,3 +102,110 @@ async def llm_status(
         has_server_llm=has_server_llm,
         server_provider=settings.llm_provider if has_server_llm else None,
     )
+
+
+# ── Configured LLMs (unified flow) ──────────────────────────────────────────
+
+
+@router.post("/test-llm", response_model=TestLlmResponse)
+async def test_llm(
+    body: TestLlmRequest,
+    user: Any = Depends(require_user),
+    svc: ApiKeyService = Depends(_api_key_service),
+) -> TestLlmResponse:
+    """Test an LLM connection with a tiny completion call."""
+    # For cloud providers, allow omitting api_key if one is already stored
+    api_key = body.api_key
+    if not api_key and body.provider != "ollama":
+        api_key = await svc.get_decrypted_key(user.id, body.provider)
+        if not api_key:
+            return TestLlmResponse(
+                success=False,
+                message=f"No API key provided or stored for {body.provider}",
+            )
+
+    success, message, response_text = await svc.test_llm_connection(
+        body.provider, body.model, api_key, body.base_url,
+    )
+    return TestLlmResponse(
+        success=success, message=message, response_text=response_text,
+    )
+
+
+@router.get("/configured-llms", response_model=ConfiguredLlmsResponse)
+async def list_configured_llms(
+    user: Any = Depends(require_user),
+    svc: ApiKeyService = Depends(_api_key_service),
+) -> ConfiguredLlmsResponse:
+    """List the user's configured LLMs with masked keys and active status."""
+    llms = await svc.get_configured_llms(user.id)
+    return ConfiguredLlmsResponse(
+        llms=[ConfiguredLlmOut(**entry) for entry in llms],
+    )
+
+
+@router.post("/configured-llms", response_model=AddLlmResponse)
+async def add_configured_llm(
+    body: AddLlmRequest,
+    user: Any = Depends(require_user),
+    svc: ApiKeyService = Depends(_api_key_service),
+) -> AddLlmResponse:
+    """Add a tested LLM configuration (also saves key if provided)."""
+    # For cloud providers, allow omitting api_key if one is already stored
+    api_key = body.api_key
+    if not api_key and body.provider != "ollama":
+        existing = await svc.get_decrypted_key(user.id, body.provider)
+        if not existing:
+            raise ValueError(f"No API key provided or stored for {body.provider}")
+
+    entry = await svc.add_configured_llm(
+        user.id, body.provider, body.model, api_key, body.base_url,
+    )
+
+    # Build masked key for response
+    masked_key: str | None = None
+    if api_key and body.provider != "ollama":
+        from aloha.services.api_key_service import _mask_key
+
+        masked_key = _mask_key(api_key)
+    elif body.provider != "ollama":
+        existing = await svc.get_decrypted_key(user.id, body.provider)
+        if existing:
+            from aloha.services.api_key_service import _mask_key
+
+            masked_key = _mask_key(existing)
+
+    return AddLlmResponse(
+        message=f"{body.provider}/{body.model} added",
+        llm=ConfiguredLlmOut(
+            id=entry["id"],
+            provider=entry["provider"],
+            model=entry["model"],
+            base_url=entry.get("base_url"),
+            masked_key=masked_key,
+            is_active=True,  # first or auto-activated
+            added_at=entry["added_at"],
+        ),
+    )
+
+
+@router.put("/configured-llms/active", response_model=MessageResponse)
+async def set_active_llm(
+    body: SetActiveLlmRequest,
+    user: Any = Depends(require_user),
+    svc: ApiKeyService = Depends(_api_key_service),
+) -> MessageResponse:
+    """Switch the active configured LLM."""
+    await svc.set_active_llm(user.id, body.llm_id)
+    return MessageResponse(message="Active LLM updated")
+
+
+@router.delete("/configured-llms", response_model=MessageResponse)
+async def delete_configured_llm(
+    body: DeleteLlmRequest,
+    user: Any = Depends(require_user),
+    svc: ApiKeyService = Depends(_api_key_service),
+) -> MessageResponse:
+    """Remove a configured LLM. Auto-promotes next if active was deleted."""
+    await svc.delete_configured_llm(user.id, body.llm_id)
+    return MessageResponse(message="Configured LLM removed")

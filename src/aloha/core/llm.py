@@ -175,6 +175,10 @@ async def resolve_user_model(
 
     Opens its own short-lived DB session so it can be called from background
     workers that don't have a request-scoped session.
+
+    Resolution order:
+    1. ``configured_llms`` + ``active_llm_id`` (new unified schema)
+    2. Legacy ``llm_provider`` / ``llm_model`` flat fields (backward compat)
     """
     if not user_id:
         return None
@@ -189,10 +193,60 @@ async def resolve_user_model(
             svc = ApiKeyService(session)
             user = await svc._get_user(UUID(user_id))
             user_settings: dict = user.settings or {}
+            llm_keys: dict = user_settings.get("llm_keys", {})
 
+            # ── Try new configured_llms schema first ────────────────────
+            configured: list[dict] = user_settings.get("configured_llms", [])
+            active_id: str | None = user_settings.get("active_llm_id")
+            if configured and active_id:
+                entry = next(
+                    (e for e in configured if e["id"] == active_id), None,
+                )
+                if entry:
+                    provider = entry["provider"]
+                    model_name = entry["model"]
+                    base_url = entry.get("base_url")
+
+                    api_key: str | None = None
+                    if provider != "ollama":
+                        api_key = await svc.get_decrypted_key(
+                            UUID(user_id), provider,
+                        )
+                        if not api_key:
+                            log.warning(
+                                "configured_llm_missing_key",
+                                user_id=user_id,
+                                provider=provider,
+                            )
+                            # Fall through to legacy path
+                        else:
+                            log.info(
+                                "resolved_user_model",
+                                user_id=user_id,
+                                provider=provider,
+                                model=model_name,
+                                agent=agent_name,
+                                source="configured_llms",
+                            )
+                            return _build_model_with_key(
+                                provider, model_name, api_key, base_url,
+                            )
+                    else:
+                        log.info(
+                            "resolved_user_model",
+                            user_id=user_id,
+                            provider="ollama",
+                            model=model_name,
+                            agent=agent_name,
+                            source="configured_llms",
+                        )
+                        return _build_model_with_key(
+                            "ollama", model_name, base_url=base_url,
+                        )
+
+            # ── Legacy flat fields fallback ─────────────────────────────
             preferred_provider: str | None = user_settings.get("llm_provider")
             preferred_model: str | None = user_settings.get("llm_model")
-            llm_keys: dict = user_settings.get("llm_keys", {})
 
             if not preferred_provider:
                 return None
@@ -207,6 +261,7 @@ async def resolve_user_model(
                     provider="ollama",
                     model=model_name,
                     agent=agent_name,
+                    source="legacy",
                 )
                 return _build_model_with_key("ollama", model_name, base_url=ollama_url)
 
@@ -225,6 +280,7 @@ async def resolve_user_model(
                 provider=preferred_provider,
                 model=model_name,
                 agent=agent_name,
+                source="legacy",
             )
             return _build_model_with_key(preferred_provider, model_name, api_key)
 
