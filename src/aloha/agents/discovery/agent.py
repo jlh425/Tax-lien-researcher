@@ -159,7 +159,26 @@ class DiscoveryAgent(BaseAgent):
             except Exception as exc:
                 self.log.warning("tier2_scraper_failed", error=str(exc))
 
-        # Tier 3: AI-adaptive browser agent (always available as fallback)
+        # Tier 3: Use registered scraper if available, else adaptive browser
+        if entry and entry.tier == 3:
+            self.log.info("using_tier3_registered", state=state, county=county)
+            try:
+                records = await self._registered_scrape(entry, state, county, max_records)
+                if records:
+                    auction_records = await self._auction_scrape(
+                        state, county, instrument, max_records
+                    )
+                    if auction_records:
+                        seen = {r["parcel_id"] for r in records if r.get("parcel_id")}
+                        for r in auction_records:
+                            pid = r.get("parcel_id")
+                            if pid and pid not in seen:
+                                records.append(r)
+                                seen.add(pid)
+                    return records
+            except Exception as exc:
+                self.log.warning("tier3_registered_failed", error=str(exc))
+
         self.log.info("using_tier3_adaptive", state=state, county=county)
         records = await self._tier3_scrape(state, county, instrument, max_records)
 
@@ -174,6 +193,22 @@ class DiscoveryAgent(BaseAgent):
                     seen.add(pid)
 
         return records
+
+    async def _registered_scrape(
+        self,
+        entry: Any,
+        state: str,
+        county: str,
+        max_records: int,
+    ) -> list[dict[str, Any]]:
+        """Dynamically import and run a registered scraper class."""
+        import importlib
+
+        module_path, cls_name = entry.scraper_class.rsplit(".", 1)
+        module = importlib.import_module(module_path)
+        scraper_cls = getattr(module, cls_name)
+        scraper = scraper_cls()
+        return await scraper.discover(max_records=max_records)
 
     async def _tier2_scrape(
         self, state: str, county: str, max_records: int

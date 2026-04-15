@@ -42,6 +42,23 @@ _ZONING_FIELD_ALIASES = ("ZONE_CODE", "ZONING", "ZONE", "ZONING_CODE", "ZONE_CLA
 _ACREAGE_FIELD_ALIASES = ("ACREAGE", "CALC_ACRES", "ACRES", "LOT_SIZE_ACRES")
 _LAND_USE_FIELD_ALIASES = ("LAND_USE", "LANDUSE", "USE_CODE", "LUC")
 
+# ── ArcGIS parcel layer registry ──────────────────────────────────────────────
+# Maps (STATE, county_lower) → ArcGIS feature layer URL for parcel enrichment.
+# The ArcGISParcelScraper handles arbitrary endpoints; this table provides the
+# service URL so callers can look up the right layer for a given county.
+ARCGIS_PARCEL_LAYERS: dict[tuple[str, str], str] = {
+    # Natrona County, WY — City of Casper Open Data hub
+    ("WY", "natrona"): (
+        "https://services.arcgis.com/YkVYBaX0zmYbMEMQ/"
+        "arcgis/rest/services/Parcels/FeatureServer/0"
+    ),
+}
+
+
+def get_arcgis_parcel_url(state: str, county: str) -> str | None:
+    """Look up the ArcGIS parcel layer URL for a state/county pair."""
+    return ARCGIS_PARCEL_LAYERS.get((state.upper(), county.lower()))
+
 
 def _pick(fields: dict[str, Any], aliases: tuple[str, ...]) -> Any:
     """Return the first matching alias value from a fields dict."""

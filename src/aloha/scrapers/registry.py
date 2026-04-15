@@ -36,6 +36,12 @@ SCRAPER_REGISTRY: dict[tuple[str, str], ScraperEntry] = {
     #     tier=3,
     #     notes="CAPTCHA gate; needs solver integration.",
     # ),
+    # ── Wyoming ────────────────────────────────────────────────────────────
+    ("WY", "natrona"): ScraperEntry(
+        scraper_class="aloha.scrapers.wy.natrona.NatronaCountyDiscoveryScraper",
+        tier=3,
+        notes="PDF delinquent list + OCR; ArcGIS for parcel enrichment.",
+    ),
 }
 
 

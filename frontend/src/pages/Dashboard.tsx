@@ -40,6 +40,7 @@ export function Dashboard() {
           Aloha <span className="text-blue-600">Tax Research</span>
         </h1>
         <nav className="flex gap-4 ml-8 text-sm">
+          <a href="/aloha" className="text-blue-600 font-medium hover:text-blue-700 transition">Aloha</a>
           <a href="/court-records" className="text-gray-500 hover:text-blue-600 transition">Court Records</a>
           <a href="/ucc" className="text-gray-500 hover:text-blue-600 transition">UCC Filings</a>
           <a href="/queue" className="text-gray-500 hover:text-blue-600 transition">Queue</a>
