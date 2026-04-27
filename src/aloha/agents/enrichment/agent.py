@@ -216,7 +216,10 @@ class EnrichmentAgent(BaseAgent):
 
 # ── Module-level singleton ─────────────────────────────────────────────────────
 
-agent = EnrichmentAgent()
+try:
+    agent = EnrichmentAgent()
+except Exception:
+    agent = None  # LLM provider not configured
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
