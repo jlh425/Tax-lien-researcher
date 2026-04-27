@@ -39,25 +39,33 @@ class TestPagePlanModel:
 
 
 class TestGuessAssessorUrl:
-    """Tests for DiscoveryAgent._guess_assessor_url."""
+    """Tests for DiscoveryAgent._guess_assessor_url.
+
+    Uses mock to avoid triggering the module-level singleton which
+    requires an LLM provider to be fully configured.
+    """
+
+    def _make_agent(self) -> Any:
+        from unittest.mock import patch, MagicMock
+        with patch("aloha.agents.base.get_agent_model", return_value=MagicMock()):
+            from aloha.agents.discovery.agent import DiscoveryAgent
+            agent = DiscoveryAgent.__new__(DiscoveryAgent)
+        return agent
 
     def test_url_contains_county_and_state(self) -> None:
-        from aloha.agents.discovery.agent import DiscoveryAgent
-        agent = DiscoveryAgent.__new__(DiscoveryAgent)
+        agent = self._make_agent()
         url = agent._guess_assessor_url("FL", "orange")
         assert "orange" in url
         assert "fl" in url
 
     def test_url_starts_with_https(self) -> None:
-        from aloha.agents.discovery.agent import DiscoveryAgent
-        agent = DiscoveryAgent.__new__(DiscoveryAgent)
+        agent = self._make_agent()
         url = agent._guess_assessor_url("CO", "denver")
         assert url is not None
         assert url.startswith("https://")
 
     def test_spaces_in_county_are_removed(self) -> None:
-        from aloha.agents.discovery.agent import DiscoveryAgent
-        agent = DiscoveryAgent.__new__(DiscoveryAgent)
+        agent = self._make_agent()
         url = agent._guess_assessor_url("FL", "miami dade")
         assert " " not in (url or "")
 
@@ -161,14 +169,14 @@ class TestLowConfidencePlanSkip:
 
         mock_page.goto = AsyncMock()
 
+        # Patch at the source module where async_playwright is imported from
         with patch(
-            "aloha.scrapers.tier3_adaptive.scraper.async_playwright",
+            "playwright.async_api.async_playwright",
             return_value=MagicMock(
                 __aenter__=AsyncMock(return_value=mock_playwright_ctx),
                 __aexit__=AsyncMock(return_value=False),
             ),
         ):
-            # Need to make playwright importable
             try:
                 result = await scraper.discover(
                     "https://example.gov",
