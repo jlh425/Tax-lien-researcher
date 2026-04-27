@@ -46,7 +46,7 @@ _HEADER_PATTERNS = re.compile(
 
 # Regex for a WY-style parcel ID: digits with optional hyphens/dots/spaces
 # e.g. "35-1N-79-0020" or "351N790020"
-_PARCEL_RE = re.compile(r"\d{1,3}[\s\-.]?\d{1,2}[NSEW]?[\s\-.]?\d{1,3}[\s\-.]?\d{2,6}")
+_PARCEL_RE = re.compile(r"\d{1,3}[\s\-.]?\d{1,2}[NSEW][\s\-.]?\d{1,3}[\s\-.]?\d{2,6}")
 
 
 class NatronaCountyDiscoveryScraper(BaseScraper):
