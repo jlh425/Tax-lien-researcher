@@ -32,7 +32,7 @@ dependencies = [
     "playwright>=1.49,<2",
 
     # AI agents (pydantic-ai core; provider SDKs are optional extras below)
-    "pydantic-ai>=0.0.36,<0.1",
+    "pydantic-ai>=1.0,<2",
 
     # Document processing & OCR
     "pymupdf>=1.25,<2",
