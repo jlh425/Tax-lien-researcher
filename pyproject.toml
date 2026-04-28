@@ -58,7 +58,7 @@ dependencies = [
     "stripe>=11.3,<12",
 
     # Observability
-    "langfuse>=2.56,<3",
+    "langfuse>=4.0,<5",
     "sentry-sdk[fastapi]>=2.19,<3",
 
     # Scheduler
