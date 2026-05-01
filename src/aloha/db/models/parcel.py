@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -58,7 +58,7 @@ class Parcel(Base, TimestampMixin):
     data_freshness: Mapped[str] = mapped_column(String(20), nullable=False, default="fresh")
     # fresh|stale|expired
     content_hash: Mapped[str | None] = mapped_column(String(64))
-    last_crawled_at: Mapped[datetime | None] = mapped_column()
+    last_crawled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # ── Relationships ─────────────────────────────────────────────────────
     user: Mapped["User"] = relationship("User", back_populates="parcels", lazy="raise")  # noqa: F821

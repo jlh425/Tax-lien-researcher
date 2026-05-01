@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from aloha.db.models.base import Base
@@ -30,8 +30,8 @@ class Alert(Base):
     alert_date: Mapped[date | None] = mapped_column(Date)
     message: Mapped[str | None] = mapped_column(Text)
     sent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    sent_at: Mapped[datetime | None] = mapped_column()
-    created_at: Mapped[datetime] = mapped_column(nullable=False)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # ── Relationships ─────────────────────────────────────────────────────
     parcel: Mapped["Parcel | None"] = relationship(  # noqa: F821

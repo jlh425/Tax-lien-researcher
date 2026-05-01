@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import ARRAY, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import ARRAY, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -56,7 +56,7 @@ class Score(Base):
     risk_flags: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
     flags_detail: Mapped[dict | None] = mapped_column(JSONB)
     score_rationale: Mapped[str | None] = mapped_column(Text)
-    scored_at: Mapped[datetime] = mapped_column(nullable=False)
+    scored_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # ── Relationships ─────────────────────────────────────────────────────
     parcel: Mapped["Parcel"] = relationship("Parcel", back_populates="scores", lazy="raise")  # noqa: F821

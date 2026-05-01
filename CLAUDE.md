@@ -9,7 +9,7 @@ make lint           # ruff + mypy
 ```
 
 ## Architecture
-- **Backend**: Python 3.12+ / FastAPI / SQLAlchemy async / PostgreSQL / Redis
+- **Backend**: Python 3.12+ / FastAPI / SQLAlchemy async / PostgreSQL / Redis / Qdrant
 - **Frontend**: React + TypeScript + Vite + TanStack Query
 - **AI Agents**: 12 Pydantic AI agents orchestrated via queue system (LLM-agnostic)
 - **LLM**: Configurable — Anthropic, OpenAI, Ollama (local), Groq, or any OpenAI-compatible API

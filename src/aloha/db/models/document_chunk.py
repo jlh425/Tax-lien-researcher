@@ -1,30 +1,20 @@
-"""Document chunk model — pgvector RAG store."""
+"""Document chunk model — text chunks for RAG (vectors stored in Qdrant)."""
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Index, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from aloha.db.models.base import Base
 
-# pgvector integration — optional at import time so the app can start without
-# the extension installed (e.g. plain Postgres in CI).
-try:
-    from pgvector.sqlalchemy import Vector
-
-    _VECTOR_TYPE = Vector(1536)
-except ImportError:  # pragma: no cover
-    from sqlalchemy import JSON as _VECTOR_TYPE  # type: ignore[assignment]
-
 
 class DocumentChunk(Base):
-    """A chunk of text from a source document, stored with its embedding.
+    """A chunk of text from a source document.
 
     Used by the RAG layer to answer questions about a parcel or owner.
-    The HNSW index on ``embedding`` is created via Alembic (not here) because
-    it requires the pgvector extension to be enabled first.
+    Embedding vectors are stored externally in Qdrant, keyed by ``id``.
     """
 
     __tablename__ = "document_chunks"
@@ -45,8 +35,7 @@ class DocumentChunk(Base):
     source_type: Mapped[str | None] = mapped_column(String(50))
     source_url: Mapped[str | None] = mapped_column(Text)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[object | None] = mapped_column(_VECTOR_TYPE, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # ── Relationships ─────────────────────────────────────────────────────
     parcel: Mapped["Parcel | None"] = relationship(  # noqa: F821

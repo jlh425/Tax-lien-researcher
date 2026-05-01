@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import ARRAY, Boolean, Date, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import ARRAY, Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -53,13 +53,13 @@ class OutreachLog(Base):
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")
     # pending|approved|sent|delivered|opened|replied|bounced|failed|declined
     approved_by: Mapped[str | None] = mapped_column(String(255))
-    approved_at: Mapped[datetime | None] = mapped_column()
-    sent_at: Mapped[datetime | None] = mapped_column()
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Delivery tracking
     delivery_status: Mapped[str | None] = mapped_column(String(50))
-    opened_at: Mapped[datetime | None] = mapped_column()
-    replied_at: Mapped[datetime | None] = mapped_column()
+    opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    replied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     bounce_reason: Mapped[str | None] = mapped_column(Text)
 
     # Phone call specific
@@ -77,7 +77,7 @@ class OutreachLog(Base):
     provider: Mapped[str | None] = mapped_column(String(30))  # sendgrid|twilio
     provider_msg_id: Mapped[str | None] = mapped_column(String(255))
 
-    created_at: Mapped[datetime] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # ── Relationships ─────────────────────────────────────────────────────
     user: Mapped["User"] = relationship("User", back_populates="outreach_logs", lazy="raise")  # noqa: F821
@@ -110,7 +110,7 @@ class DoNotContact(Base):
     owner_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("owners.id", ondelete="SET NULL")
     )
-    created_at: Mapped[datetime] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     def __repr__(self) -> str:
         return f"<DoNotContact id={self.id} type={self.contact_type!r} reason={self.reason!r}>"
@@ -130,8 +130,8 @@ class OutreachTemplate(Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     variables: Mapped[list[str] | None] = mapped_column(ARRAY(Text))  # Jinja2 variable names
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at: Mapped[datetime] = mapped_column(nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     def __repr__(self) -> str:
         return (

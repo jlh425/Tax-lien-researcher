@@ -18,9 +18,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # ── Enable pgvector extension ─────────────────────────────────────────
-    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
-
     # ── users ─────────────────────────────────────────────────────────────
     op.create_table(
         "users",
@@ -392,7 +389,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("template_name"),
     )
 
-    # ── document_chunks (pgvector RAG store) ──────────────────────────────
+    # ── document_chunks (vectors stored in Qdrant) ─────────────────────────
     op.create_table(
         "document_chunks",
         sa.Column("id", sa.Integer, autoincrement=True, nullable=False),
@@ -401,20 +398,12 @@ def upgrade() -> None:
         sa.Column("source_type", sa.String(50)),
         sa.Column("source_url", sa.Text),
         sa.Column("content", sa.Text, nullable=False),
-        sa.Column("embedding", sa.Text),   # placeholder; overridden below with vector type
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(["parcel_id"], ["parcels.parcel_id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["entity_id"], ["entities.id"], ondelete="CASCADE"),
     )
-    # Replace placeholder Text column with the actual vector type
-    op.execute("ALTER TABLE document_chunks ALTER COLUMN embedding TYPE vector(1536) USING NULL")
     op.create_index("idx_chunks_parcel", "document_chunks", ["parcel_id"])
-    # HNSW index for fast ANN search — created after data load for better quality
-    op.execute(
-        "CREATE INDEX idx_chunks_embedding ON document_chunks "
-        "USING hnsw (embedding vector_cosine_ops)"
-    )
 
     # ── alerts ────────────────────────────────────────────────────────────
     op.create_table(
@@ -456,4 +445,3 @@ def downgrade() -> None:
     op.drop_table("tax_liens")
     op.drop_table("parcels")
     op.drop_table("users")
-    op.execute("DROP EXTENSION IF EXISTS vector")

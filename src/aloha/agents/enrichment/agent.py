@@ -3,7 +3,7 @@
 Responsibilities:
 1. Trigger image capture (Mapbox satellite → Google fallback; Google Street View optional)
 2. Call a multimodal LLM (Claude vision / GPT-4V) to extract PropertyConditionReport
-3. Store the condition text as a DocumentChunk with an OpenAI embedding for pgvector RAG
+3. Store the condition text as a DocumentChunk and upsert its embedding into Qdrant
 4. Advance parcel research_status to 'enriched' and enqueue 'scoring'
 """
 
@@ -140,7 +140,7 @@ class EnrichmentAgent(BaseAgent):
             condition_text = json.dumps(condition.model_dump(), indent=2)
             condition_summary = condition.summary or condition_text[:200]
 
-        # ── Step 6: Embed and store DocumentChunk ─────────────────────────
+        # ── Step 6: Store DocumentChunk + upsert embedding to Qdrant ─────
         embedding = await embed_text(condition_summary)
 
         async with async_session_factory() as session:
@@ -150,10 +150,20 @@ class EnrichmentAgent(BaseAgent):
                 source_type="vision_analysis",
                 source_url=selected.source_url,
                 content=condition_text,
-                embedding=embedding,
                 created_at=datetime.now(tz=timezone.utc),
             )
-            await chunk_repo.add(chunk)
+            await chunk_repo.add(chunk)  # flush assigns chunk.id
+
+            # Upsert embedding to Qdrant (non-blocking — errors are logged)
+            if embedding is not None:
+                from aloha.core import vector_store
+
+                await vector_store.ensure_collection()
+                await vector_store.upsert(
+                    chunk_id=chunk.id,
+                    vector=embedding,
+                    metadata={"parcel_id": parcel_id, "source_type": "vision_analysis"},
+                )
 
             # ── Step 7: Advance status and enqueue scoring ─────────────────
             parcel_repo = ParcelRepository(session)
@@ -211,7 +221,7 @@ class EnrichmentAgent(BaseAgent):
         result = await vision_agent.run(
             [task, BinaryContent(data=image_bytes, media_type=mime_type)]
         )
-        return result.data
+        return result.output
 
 
 # ── Module-level singleton ─────────────────────────────────────────────────────

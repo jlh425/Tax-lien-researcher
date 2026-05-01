@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Any, Sequence
 
 from sqlalchemy import select as sa_select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,18 +61,29 @@ class DocumentChunkRepository:
         limit: int = 10,
         parcel_id: str | None = None,
     ) -> Sequence[DocumentChunk]:
-        """Cosine similarity search via pgvector HNSW index.
+        """Similarity search via Qdrant, then bulk-load matching chunks from PG.
 
-        Returns [] if pgvector is not installed (e.g. plain Postgres in CI).
+        Returns results ordered by Qdrant similarity rank.
+        Returns ``[]`` if Qdrant is unavailable.
         """
-        try:
-            from pgvector.sqlalchemy import Vector  # noqa: F401
-        except ImportError:
+        from aloha.core import vector_store
+
+        filter_conditions: dict[str, Any] | None = None
+        if parcel_id:
+            filter_conditions = {"parcel_id": parcel_id}
+
+        hits = await vector_store.search(
+            query_vector=query_embedding,
+            limit=limit,
+            filter_conditions=filter_conditions,
+        )
+        if not hits:
             return []
 
-        stmt = sa_select(DocumentChunk)
-        if parcel_id:
-            stmt = stmt.where(DocumentChunk.parcel_id == parcel_id)
-        stmt = stmt.order_by(DocumentChunk.embedding.cosine_distance(query_embedding)).limit(limit)
-        result = await self._session.execute(stmt)
-        return result.scalars().all()
+        # Preserve Qdrant rank order
+        hit_ids = [h["id"] for h in hits]
+        result = await self._session.execute(
+            sa_select(DocumentChunk).where(DocumentChunk.id.in_(hit_ids))
+        )
+        chunks_by_id = {c.id: c for c in result.scalars().all()}
+        return [chunks_by_id[cid] for cid in hit_ids if cid in chunks_by_id]

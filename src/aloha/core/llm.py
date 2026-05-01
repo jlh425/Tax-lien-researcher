@@ -42,39 +42,53 @@ def _build_model(provider: str, model_name: str) -> Any:
 
         case "openai":
             from pydantic_ai.models.openai import OpenAIModel
+            from pydantic_ai.providers.openai import OpenAIProvider
 
             if not settings.openai_api_key:
                 log.warning("no_openai_api_key", model=model_name)
                 return None
-            return OpenAIModel(model_name, api_key=settings.openai_api_key)
+            return OpenAIModel(
+                model_name,
+                provider=OpenAIProvider(api_key=settings.openai_api_key),
+            )
 
         case "ollama":
             from pydantic_ai.models.openai import OpenAIModel
+            from pydantic_ai.providers.openai import OpenAIProvider
 
             return OpenAIModel(
                 model_name,
-                base_url=f"{settings.ollama_base_url}/v1",
-                api_key="ollama",  # Ollama doesn't need a real key
+                provider=OpenAIProvider(
+                    base_url=f"{settings.ollama_base_url}/v1",
+                    api_key="ollama",
+                ),
             )
 
         case "groq":
-            from pydantic_ai.models.groq import GroqModel
+            from pydantic_ai.models.openai import OpenAIModel
+            from pydantic_ai.providers.groq import GroqProvider
 
             if not settings.groq_api_key:
                 log.warning("no_groq_api_key", model=model_name)
                 return None
-            return GroqModel(model_name, api_key=settings.groq_api_key)
+            return OpenAIModel(
+                model_name,
+                provider=GroqProvider(api_key=settings.groq_api_key),
+            )
 
         case "openai-compatible":
             from pydantic_ai.models.openai import OpenAIModel
+            from pydantic_ai.providers.openai import OpenAIProvider
 
             if not settings.openai_compatible_base_url:
                 log.warning("no_openai_compatible_base_url", model=model_name)
                 return None
             return OpenAIModel(
                 model_name,
-                base_url=settings.openai_compatible_base_url,
-                api_key=settings.openai_compatible_api_key or "no-key",
+                provider=OpenAIProvider(
+                    base_url=settings.openai_compatible_base_url,
+                    api_key=settings.openai_compatible_api_key or "no-key",
+                ),
             )
 
         case _:
@@ -145,22 +159,33 @@ def _build_model_with_key(
 
         case "openai":
             from pydantic_ai.models.openai import OpenAIModel
+            from pydantic_ai.providers.openai import OpenAIProvider
 
-            return OpenAIModel(model_name, api_key=api_key)
+            return OpenAIModel(
+                model_name,
+                provider=OpenAIProvider(api_key=api_key),
+            )
 
         case "groq":
-            from pydantic_ai.models.groq import GroqModel
+            from pydantic_ai.models.openai import OpenAIModel
+            from pydantic_ai.providers.groq import GroqProvider
 
-            return GroqModel(model_name, api_key=api_key)
+            return OpenAIModel(
+                model_name,
+                provider=GroqProvider(api_key=api_key),
+            )
 
         case "ollama":
             from pydantic_ai.models.openai import OpenAIModel
+            from pydantic_ai.providers.openai import OpenAIProvider
 
-            ollama_url = base_url or "http://localhost:11434"
+            ollama_url = (base_url or "http://localhost:11434").rstrip("/")
             return OpenAIModel(
                 model_name,
-                base_url=f"{ollama_url.rstrip('/')}/v1",
-                api_key="ollama",
+                provider=OpenAIProvider(
+                    base_url=f"{ollama_url}/v1",
+                    api_key="ollama",
+                ),
             )
 
         case _:

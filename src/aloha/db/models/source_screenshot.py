@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import ARRAY, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import ARRAY, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from aloha.db.models.base import Base
@@ -41,7 +41,7 @@ class SourceScreenshot(Base):
     # Fields extracted from this screenshot
     data_extracted: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
 
-    captured_at: Mapped[datetime] = mapped_column(nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # ── Relationships ─────────────────────────────────────────────────────
     parcel: Mapped["Parcel"] = relationship(  # noqa: F821

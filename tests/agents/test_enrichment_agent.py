@@ -234,28 +234,56 @@ class TestMapboxLonLatOrder:
 
 class TestEmbedText:
     @pytest.mark.asyncio
-    async def test_returns_none_without_openai_key(self) -> None:
+    async def test_openai_returns_none_without_key(self) -> None:
         from aloha.core.embeddings import embed_text
 
-        with patch("aloha.config.settings") as mock_settings:
+        with patch("aloha.core.embeddings.settings") as mock_settings:
+            mock_settings.embedding_provider = "openai"
             mock_settings.openai_api_key = None
             result = await embed_text("test text")
 
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_returns_none_on_api_error(self) -> None:
+    async def test_openai_returns_none_on_api_error(self) -> None:
         from aloha.core.embeddings import embed_text
 
         mock_client = AsyncMock()
         mock_client.embeddings.create = AsyncMock(side_effect=RuntimeError("API down"))
 
-        with patch("aloha.config.settings") as mock_settings:
+        with patch("aloha.core.embeddings.settings") as mock_settings:
+            mock_settings.embedding_provider = "openai"
             mock_settings.openai_api_key = "fake-key"
-            # Patch at the module path where the deferred import resolves,
-            # not at openai.AsyncOpenAI (which would require openai installed).
+            mock_settings.embedding_model = "text-embedding-3-small"
+            mock_settings.embedding_dimensions = 1536
             with patch("aloha.core.embeddings.AsyncOpenAI", return_value=mock_client):
                 result = await embed_text("test text")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_ollama_returns_none_on_api_error(self) -> None:
+        from aloha.core.embeddings import embed_text
+
+        mock_client = AsyncMock()
+        mock_client.embeddings.create = AsyncMock(side_effect=RuntimeError("connection refused"))
+
+        with patch("aloha.core.embeddings.settings") as mock_settings:
+            mock_settings.embedding_provider = "ollama"
+            mock_settings.ollama_embedding_url = "http://localhost:11434"
+            mock_settings.embedding_model = "mxbai-embed-large"
+            with patch("aloha.core.embeddings.AsyncOpenAI", return_value=mock_client):
+                result = await embed_text("test text")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_unknown_provider_returns_none(self) -> None:
+        from aloha.core.embeddings import embed_text
+
+        with patch("aloha.core.embeddings.settings") as mock_settings:
+            mock_settings.embedding_provider = "unsupported"
+            result = await embed_text("test text")
 
         assert result is None
 

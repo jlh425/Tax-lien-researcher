@@ -211,7 +211,7 @@ class ReportAgent(BaseAgent):
         )
         task = build_report_task(data, report)
         result = await pydantic_agent.run(task)
-        return result.data
+        return result.output
 
     # ── Persistence ───────────────────────────────────────────────────────
 

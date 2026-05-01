@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import ARRAY, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import ARRAY, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from aloha.db.models.base import Base
@@ -31,7 +31,7 @@ class PropertyImage(Base):
     source_url: Mapped[str | None] = mapped_column(Text)
     width: Mapped[int | None] = mapped_column(Integer)
     height: Mapped[int | None] = mapped_column(Integer)
-    captured_at: Mapped[datetime] = mapped_column(nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     # GIS map overlays active when captured
     overlays: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
 

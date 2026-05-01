@@ -13,6 +13,17 @@ class Settings(BaseSettings):
     database_url_sync: str = "postgresql+psycopg2://localhost:5432/aloha"
     redis_url: str = "redis://localhost:6379/0"
 
+    # ── Vector Store (Qdrant) ─────────────────────────────────────────────
+    qdrant_url: str = "http://localhost:6333"
+    qdrant_api_key: str | None = None
+    qdrant_collection: str = "document_chunks"
+
+    # ── Embedding Provider ─────────────────────────────────────────────────
+    embedding_provider: Literal["openai", "ollama"] = "openai"
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dimensions: int = 1536
+    ollama_embedding_url: str = "http://localhost:11434"
+
     # ── Auth / Security ───────────────────────────────────────────────────
     secret_key: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"

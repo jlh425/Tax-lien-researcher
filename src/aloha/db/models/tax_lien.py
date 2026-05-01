@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Date, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -65,8 +65,8 @@ class TaxLien(Base):
     # Source tracking
     source_url: Mapped[str | None] = mapped_column(Text)
     content_hash: Mapped[str | None] = mapped_column(String(64))
-    retrieved_at: Mapped[datetime] = mapped_column(nullable=False)
-    last_verified_at: Mapped[datetime | None] = mapped_column()
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # ── Relationships ─────────────────────────────────────────────────────
     parcel: Mapped["Parcel"] = relationship("Parcel", back_populates="tax_liens", lazy="raise")  # noqa: F821

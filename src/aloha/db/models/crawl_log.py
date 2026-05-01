@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from aloha.db.models.base import Base
@@ -35,7 +35,7 @@ class CrawlLog(Base):
     content_hash: Mapped[str | None] = mapped_column(String(64))
     changed: Mapped[bool | None] = mapped_column(Boolean)
     error_message: Mapped[str | None] = mapped_column(Text)
-    crawled_at: Mapped[datetime] = mapped_column(nullable=False)
+    crawled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     def __repr__(self) -> str:
         return (

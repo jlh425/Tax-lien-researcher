@@ -213,7 +213,7 @@ class AdaptiveBrowserScraper:
                 system_prompt=_SYSTEM_PROMPT,
             )
             result = await agent.run(prompt)
-            return result.data
+            return result.output
         except (ValidationError, Exception) as exc:
             log.warning("adaptive_llm_failed", error=str(exc))
             return PagePlan(

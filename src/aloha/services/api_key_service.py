@@ -187,7 +187,7 @@ class ApiKeyService(BaseService):
             llm_model = _build_model_with_key(provider, model, api_key, base_url)
             agent = Agent(llm_model)
             result = await agent.run("Say hello in exactly 5 words.")
-            return (True, "Connection successful", result.data)
+            return (True, "Connection successful", result.output)
         except Exception as exc:
             return (False, f"LLM call failed: {exc}", None)
 
