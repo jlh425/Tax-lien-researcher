@@ -101,11 +101,8 @@ class TestProcessOne:
 
     @pytest.mark.asyncio
     async def test_dispatches_and_completes(self, agent):
-        # Create a mock queue item
-        mock_item = MagicMock()
-        mock_item.id = 42
-        mock_item.agent_name = "scoring"
-        mock_item.payload = {"parcel_id": "TEST-001"}
+        # claim_one returns a plain dict (not ORM object)
+        mock_item = {"id": 42, "agent_name": "scoring", "payload": {"parcel_id": "TEST-001"}}
 
         mock_queue_repo = MagicMock()
         mock_queue_repo.claim_one = AsyncMock(return_value=mock_item)
@@ -124,6 +121,7 @@ class TestProcessOne:
                 result = await agent._process_one()
 
         assert result is True
+        mock_sub.run.assert_called_once_with({"parcel_id": "TEST-001"})
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

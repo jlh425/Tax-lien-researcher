@@ -75,7 +75,11 @@ class OrchestratorAgent(BaseAgent):
 
         try:
             while self._running:
-                processed = await self._process_one()
+                try:
+                    processed = await self._process_one()
+                except Exception as exc:
+                    self.log.exception("process_one_error", error=str(exc))
+                    processed = False
                 if not processed:
                     await asyncio.sleep(_IDLE_SLEEP_SECONDS)
         finally:
@@ -93,14 +97,14 @@ class OrchestratorAgent(BaseAgent):
         """
         async with async_session_factory() as session:
             queue_repo = QueueRepository(session)
-            item = await queue_repo.claim_one()
+            item = await queue_repo.claim_one(agent_id="orchestrator")
 
             if item is None:
                 return False
 
-            item_id = item.id
-            agent_name = item.agent_name
-            payload = item.payload or {}
+            item_id = item["id"]
+            agent_name = item["agent_name"]
+            payload = item.get("payload") or {}
 
         self.log.info("dispatching_queue_item", item_id=item_id, agent=agent_name)
 
@@ -110,7 +114,7 @@ class OrchestratorAgent(BaseAgent):
             async with async_session_factory() as session:
                 queue_repo = QueueRepository(session)
                 await queue_repo.fail(
-                    item_id, error=f"Unknown agent: {agent_name!r}", max_retries=0
+                    item_id, error=f"Unknown agent: {agent_name!r}", max_attempts=0
                 )
                 await session.commit()
             return True
@@ -158,16 +162,24 @@ class OrchestratorAgent(BaseAgent):
         from aloha.agents.parcel_research.agent import agent as parcel_agent
         from aloha.agents.owner_research.agent import agent as owner_agent
         from aloha.agents.entity_research.agent import agent as entity_agent
+        from aloha.agents.contact_research.agent import agent as contact_agent
+        from aloha.agents.enrichment.agent import agent as enrichment_agent
         from aloha.agents.scoring.agent import agent as scoring_agent
         from aloha.agents.report.agent import agent as report_agent
+        from aloha.agents.outreach.agent import agent as outreach_agent
+        from aloha.agents.zoning.agent import agent as zoning_agent
 
         self._dispatch_map = {
             "discovery": discovery_agent,
             "parcel_research": parcel_agent,
             "owner_research": owner_agent,
             "entity_research": entity_agent,
+            "contact_research": contact_agent,
+            "enrichment": enrichment_agent,
             "scoring": scoring_agent,
             "report": report_agent,
+            "outreach": outreach_agent,
+            "zoning": zoning_agent,
         }
 
     def _get_agent(self, agent_name: str) -> BaseAgent | None:

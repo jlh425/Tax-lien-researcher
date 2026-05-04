@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any, Sequence
 
 from sqlalchemy import select, text, update
@@ -11,7 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from aloha.db.models.queue_item import QueueItem
 
 # ── SQL for atomic SKIP LOCKED claim ──────────────────────────────────────────
-_CLAIM_SQL = text("""
+# Two variants: asyncpg cannot infer type for NULL parameters used in both
+# IS NULL and = comparisons, so we use separate queries.
+_CLAIM_SQL_ANY = text("""
     UPDATE queue_items
        SET status     = 'processing',
            claimed_by  = :agent_id,
@@ -22,7 +25,25 @@ _CLAIM_SQL = text("""
            FROM queue_items
           WHERE status IN ('pending', 'retry')
             AND (next_retry_at IS NULL OR next_retry_at <= now())
-            AND (:agent_name IS NULL OR agent_name = :agent_name)
+          ORDER BY priority ASC, created_at ASC
+            FOR UPDATE SKIP LOCKED
+          LIMIT 1
+     )
+     RETURNING id, parcel_id, agent_name, stage, payload, attempts
+""")
+
+_CLAIM_SQL_NAMED = text("""
+    UPDATE queue_items
+       SET status     = 'processing',
+           claimed_by  = :agent_id,
+           claimed_at  = now(),
+           updated_at  = now()
+     WHERE id = (
+         SELECT id
+           FROM queue_items
+          WHERE status IN ('pending', 'retry')
+            AND (next_retry_at IS NULL OR next_retry_at <= now())
+            AND agent_name = :agent_name
           ORDER BY priority ASC, created_at ASC
             FOR UPDATE SKIP LOCKED
           LIMIT 1
@@ -72,10 +93,16 @@ class QueueRepository:
 
         Returns the row mapping if a job was claimed, ``None`` if queue empty.
         """
-        result = await self._session.execute(
-            _CLAIM_SQL,
-            {"agent_id": agent_id, "agent_name": agent_name},
-        )
+        if agent_name is not None:
+            result = await self._session.execute(
+                _CLAIM_SQL_NAMED,
+                {"agent_id": agent_id, "agent_name": agent_name},
+            )
+        else:
+            result = await self._session.execute(
+                _CLAIM_SQL_ANY,
+                {"agent_id": agent_id},
+            )
         row = result.mappings().first()
         return dict(row) if row else None
 
@@ -86,7 +113,7 @@ class QueueRepository:
             .where(QueueItem.id == item_id)
             .values(
                 status="complete",
-                result=result,
+                result=_sanitize_for_json(result),
                 completed_at=datetime.now(tz=timezone.utc),
                 updated_at=datetime.now(tz=timezone.utc),
             )
@@ -165,3 +192,16 @@ class QueueRepository:
             )
         )
         return result.rowcount
+
+
+def _sanitize_for_json(obj: Any) -> Any:
+    """Convert Decimal and other non-JSON-native types for JSONB storage."""
+    if obj is None:
+        return None
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_for_json(v) for v in obj]
+    if isinstance(obj, Decimal):
+        return float(obj)
+    return obj
