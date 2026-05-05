@@ -3,7 +3,7 @@
 Natrona County (Casper, WY) is a **lien certificate** state with a 15% fixed
 interest rate and annual August sale.  The county publishes its delinquent tax
 list as a PDF on its website.  This scraper downloads the PDF, extracts text
-via ``pymupdf`` (with ``pytesseract`` OCR fallback for scanned pages), parses
+via ``pymupdf`` (with ``docling`` RapidOCR fallback for scanned pages), parses
 the structured table rows, and returns normalised records matching the
 canonical field names used by the rest of the pipeline.
 

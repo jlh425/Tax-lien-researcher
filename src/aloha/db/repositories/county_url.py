@@ -41,15 +41,34 @@ class CountyUrlRepository:
         confidence: float = 1.0,
         source: str = "seed",
     ) -> CountyUrl:
-        """Insert or update a county URL (merge on unique constraint)."""
+        """Insert or update a county URL keyed on (state, county, url_type)."""
+        state_upper = state.upper()
+        county_lower = county.lower()
+
+        # Query by unique constraint rather than PK (UUID is auto-generated)
+        stmt = select(CountyUrl).where(
+            CountyUrl.state == state_upper,
+            CountyUrl.county == county_lower,
+            CountyUrl.url_type == url_type,
+        )
+        result = await self._session.execute(stmt)
+        existing = result.scalar_one_or_none()
+
+        if existing:
+            existing.url = url
+            existing.confidence = confidence
+            existing.source = source
+            await self._session.flush()
+            return existing
+
         record = CountyUrl(
-            state=state.upper(),
-            county=county.lower(),
+            state=state_upper,
+            county=county_lower,
             url_type=url_type,
             url=url,
             confidence=confidence,
             source=source,
         )
-        merged = await self._session.merge(record)
+        self._session.add(record)
         await self._session.flush()
-        return merged
+        return record
