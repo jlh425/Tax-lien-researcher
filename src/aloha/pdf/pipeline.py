@@ -84,11 +84,10 @@ async def extract_native_text(data: bytes) -> ExtractionResult:
 
 
 async def extract_scanned_text(data: bytes) -> ExtractionResult:
-    """Run OCR on a scanned PDF using PyMuPDF rendering + pytesseract.
+    """Run OCR on a scanned PDF using docling's RapidOCR (pure-Python, ONNX-based).
 
-    Renders each page to a high-DPI image, then runs Tesseract OCR via
-    pytesseract.  Falls back to empty text (with a warning) if Tesseract
-    is not installed on the host.
+    Uses docling's ``DocumentConverter`` with ``RapidOcrOptions`` — no system
+    dependencies required (no tesseract binary needed).
 
     Args:
         data: Raw PDF bytes.
@@ -100,40 +99,53 @@ async def extract_scanned_text(data: bytes) -> ExtractionResult:
 
     log.info("ocr_extraction_started", size_bytes=len(data))
 
+    # Get page count and metadata via pymupdf (fast)
     doc = pymupdf.open(stream=data, filetype="pdf")
     page_count = len(doc)
     metadata = dict(doc.metadata) if doc.metadata else {}
-    pages_text: list[str] = []
+    doc.close()
 
     try:
-        import pytesseract
-        from PIL import Image
-
-        for i, page in enumerate(doc):
-            # Render at 300 DPI for good OCR accuracy
-            pix = page.get_pixmap(dpi=300)
-            img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
-            text = pytesseract.image_to_string(img)
-            pages_text.append(text)
-            log.debug("ocr_page_done", page=i + 1, chars=len(text))
-
-        metadata["ocr_engine"] = "tesseract"
+        text = _run_docling_ocr(data)
+        metadata["ocr_engine"] = "rapidocr"
+        log.info("ocr_extraction_done", chars=len(text), pages=page_count)
     except ImportError:
-        log.warning("pytesseract_not_installed, OCR unavailable")
+        log.warning("docling_ocr_unavailable")
+        text = ""
         metadata["ocr_engine"] = "unavailable"
     except Exception as exc:
         log.warning("ocr_failed", error=str(exc))
+        text = ""
         metadata["ocr_engine"] = "error"
         metadata["ocr_error"] = str(exc)
-    finally:
-        doc.close()
 
     return ExtractionResult(
         kind=PDFKind.SCANNED,
-        text="\n\n".join(pages_text),
+        text=text,
         page_count=page_count,
         metadata=metadata,
     )
+
+
+def _run_docling_ocr(data: bytes) -> str:
+    """Run docling OCR on raw PDF bytes. Raises ImportError if unavailable."""
+    from docling.datamodel.base_models import InputFormat
+    from docling.datamodel.document import DocumentStream
+    from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
+    from docling.document_converter import DocumentConverter, PdfFormatOption
+
+    pipeline_opts = PdfPipelineOptions(
+        do_ocr=True,
+        ocr_options=RapidOcrOptions(lang=["english"], force_full_page_ocr=True),
+        do_table_structure=False,
+    )
+    converter = DocumentConverter(
+        format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_opts)}
+    )
+
+    source = DocumentStream(name="document.pdf", stream=io.BytesIO(data))
+    result = converter.convert(source)
+    return result.document.export_to_text()
 
 
 async def process_pdf(source: str | Path | bytes) -> ExtractionResult:

@@ -31,16 +31,6 @@ def _text_page(text: str):
     return p
 
 
-def _pixel_page():
-    pix = MagicMock()
-    pix.width = 50
-    pix.height = 50
-    pix.samples = b"\x00" * (50 * 50 * 3)
-    p = MagicMock()
-    p.get_pixmap.return_value = pix
-    return p
-
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # detect_pdf_kind
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -92,63 +82,59 @@ class TestExtractNativeText:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# extract_scanned_text
+# extract_scanned_text (docling OCR)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
 class TestExtractScannedText:
     @pytest.mark.asyncio
     async def test_ocr_success(self) -> None:
-        doc = _mock_doc([_pixel_page()])
+        doc = _mock_doc([_text_page("")])
         with (
             patch("pymupdf.open", return_value=doc),
             patch(
-                "pytesseract.image_to_string", return_value="OCR text"
+                "aloha.pdf.pipeline._run_docling_ocr",
+                return_value="OCR text from docling",
             ) as mock_ocr,
         ):
             result = await extract_scanned_text(b"fake-scanned")
 
         assert result.kind == PDFKind.SCANNED
-        assert "OCR text" in result.text
+        assert "OCR text from docling" in result.text
         assert result.page_count == 1
-        assert result.metadata["ocr_engine"] == "tesseract"
-        mock_ocr.assert_called_once()
+        assert result.metadata["ocr_engine"] == "rapidocr"
+        mock_ocr.assert_called_once_with(b"fake-scanned")
 
     @pytest.mark.asyncio
-    async def test_ocr_multipage(self) -> None:
-        doc = _mock_doc([_pixel_page(), _pixel_page(), _pixel_page()])
-        call_num = 0
-
-        def fake_ocr(img):
-            nonlocal call_num
-            call_num += 1
-            return f"Page {call_num}"
-
-        with (
-            patch("pymupdf.open", return_value=doc),
-            patch("pytesseract.image_to_string", side_effect=fake_ocr),
-        ):
-            result = await extract_scanned_text(b"fake-bytes")
-
-        assert result.page_count == 3
-        assert "Page 1" in result.text
-        assert "Page 3" in result.text
-
-    @pytest.mark.asyncio
-    async def test_ocr_runtime_error(self) -> None:
-        doc = _mock_doc([_pixel_page()])
+    async def test_ocr_import_error(self) -> None:
+        doc = _mock_doc([_text_page("")])
         with (
             patch("pymupdf.open", return_value=doc),
             patch(
-                "pytesseract.image_to_string",
-                side_effect=RuntimeError("tesseract not found"),
+                "aloha.pdf.pipeline._run_docling_ocr",
+                side_effect=ImportError("no docling"),
+            ),
+        ):
+            result = await extract_scanned_text(b"fake-bytes")
+
+        assert result.text == ""
+        assert result.metadata["ocr_engine"] == "unavailable"
+
+    @pytest.mark.asyncio
+    async def test_ocr_runtime_error(self) -> None:
+        doc = _mock_doc([_text_page("")])
+        with (
+            patch("pymupdf.open", return_value=doc),
+            patch(
+                "aloha.pdf.pipeline._run_docling_ocr",
+                side_effect=RuntimeError("onnx crash"),
             ),
         ):
             result = await extract_scanned_text(b"fake-bytes")
 
         assert result.text == ""
         assert result.metadata["ocr_engine"] == "error"
-        assert "tesseract not found" in result.metadata["ocr_error"]
+        assert "onnx crash" in result.metadata["ocr_error"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

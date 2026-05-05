@@ -6,6 +6,7 @@ which is required for Alembic autogenerate to work correctly.
 
 from aloha.db.models.alert import Alert
 from aloha.db.models.base import Base, TimestampMixin
+from aloha.db.models.county_url import CountyUrl
 from aloha.db.models.crawl_log import CrawlLog
 from aloha.db.models.document_chunk import DocumentChunk
 from aloha.db.models.outreach import DoNotContact, OutreachLog, OutreachTemplate
@@ -42,4 +43,6 @@ __all__ = [
     "OutreachTemplate",
     # Alerts
     "Alert",
+    # URL resolution cache
+    "CountyUrl",
 ]

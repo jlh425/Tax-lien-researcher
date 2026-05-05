@@ -38,36 +38,30 @@ class TestPagePlanModel:
         assert plan.confidence == 0.0
 
 
-class TestGuessAssessorUrl:
-    """Tests for DiscoveryAgent._guess_assessor_url.
+class TestCountyUrlResolverStaticRegistry:
+    """Tests for CountyUrlResolver static registry lookups (replaces _guess_assessor_url)."""
 
-    Uses mock to avoid triggering the module-level singleton which
-    requires an LLM provider to be fully configured.
-    """
+    def test_resolves_known_county_from_registry(self) -> None:
+        from aloha.services.county_url_resolver import CountyUrlResolver
 
-    def _make_agent(self) -> Any:
-        from unittest.mock import patch, MagicMock
-        with patch("aloha.agents.base.get_agent_model", return_value=MagicMock()):
-            from aloha.agents.discovery.agent import DiscoveryAgent
-            agent = DiscoveryAgent.__new__(DiscoveryAgent)
-        return agent
-
-    def test_url_contains_county_and_state(self) -> None:
-        agent = self._make_agent()
-        url = agent._guess_assessor_url("FL", "orange")
-        assert "orange" in url
-        assert "fl" in url
-
-    def test_url_starts_with_https(self) -> None:
-        agent = self._make_agent()
-        url = agent._guess_assessor_url("CO", "denver")
+        resolver = CountyUrlResolver()
+        url = resolver._check_static_registry("FL", "orange", "assessor")
         assert url is not None
         assert url.startswith("https://")
 
-    def test_spaces_in_county_are_removed(self) -> None:
-        agent = self._make_agent()
-        url = agent._guess_assessor_url("FL", "miami dade")
-        assert " " not in (url or "")
+    def test_returns_none_for_unknown_county(self) -> None:
+        from aloha.services.county_url_resolver import CountyUrlResolver
+
+        resolver = CountyUrlResolver()
+        url = resolver._check_static_registry("XX", "nonexistent", "assessor")
+        assert url is None
+
+    def test_texas_harris(self) -> None:
+        from aloha.services.county_url_resolver import CountyUrlResolver
+
+        resolver = CountyUrlResolver()
+        url = resolver._check_static_registry("TX", "harris", "assessor")
+        assert url == "https://hcad.org"
 
 
 class TestNormaliseAdaptive:

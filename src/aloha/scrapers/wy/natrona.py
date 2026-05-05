@@ -97,10 +97,11 @@ class NatronaCountyDiscoveryScraper(BaseScraper):
 
 
 def _extract_text(pdf_bytes: bytes) -> str:
-    """Extract text from PDF bytes using pymupdf, falling back to OCR."""
+    """Extract text from PDF bytes using pymupdf, falling back to docling OCR."""
     import fitz  # pymupdf
 
     text_parts: list[str] = []
+    needs_ocr = False
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
 
     for page in doc:
@@ -108,26 +109,41 @@ def _extract_text(pdf_bytes: bytes) -> str:
         if page_text and len(page_text.strip()) > 50:
             text_parts.append(page_text)
         else:
-            # Scanned page — fall back to OCR
-            ocr_text = _ocr_page(page)
-            if ocr_text:
-                text_parts.append(ocr_text)
+            needs_ocr = True
+            text_parts.append("")  # placeholder
 
     doc.close()
+
+    if needs_ocr:
+        # Run the whole PDF through docling's OCR pipeline
+        ocr_text = _ocr_pdf(pdf_bytes)
+        if ocr_text:
+            return ocr_text
+
     return "\n".join(text_parts)
 
 
-def _ocr_page(page: Any) -> str:
-    """OCR a single PDF page using pytesseract."""
+def _ocr_pdf(pdf_bytes: bytes) -> str:
+    """OCR a full PDF using docling's RapidOCR (pure-Python, no system deps)."""
     try:
-        import pytesseract
-        from PIL import Image
+        from docling.datamodel.base_models import InputFormat
+        from docling.datamodel.document import DocumentStream
+        from docling.datamodel.pipeline_options import PdfPipelineOptions, RapidOcrOptions
+        from docling.document_converter import DocumentConverter, PdfFormatOption
 
-        pix = page.get_pixmap(dpi=300)
-        img = Image.open(io.BytesIO(pix.tobytes("png")))
-        return pytesseract.image_to_string(img)
+        pipeline_opts = PdfPipelineOptions(
+            do_ocr=True,
+            ocr_options=RapidOcrOptions(lang=["english"], force_full_page_ocr=True),
+            do_table_structure=False,
+        )
+        converter = DocumentConverter(
+            format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_opts)}
+        )
+        source = DocumentStream(name="natrona_delinquent.pdf", stream=io.BytesIO(pdf_bytes))
+        result = converter.convert(source)
+        return result.document.export_to_text()
     except ImportError:
-        log.debug("pytesseract_not_available")
+        log.debug("docling_ocr_not_available")
         return ""
     except Exception as exc:
         log.warning("ocr_failed", error=str(exc))

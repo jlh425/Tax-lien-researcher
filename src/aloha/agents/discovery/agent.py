@@ -235,8 +235,10 @@ class DiscoveryAgent(BaseAgent):
     ) -> list[dict[str, Any]]:
         """AI-adaptive browser scraper — uses LLM + Playwright to navigate unknown portals."""
         from aloha.scrapers.tier3_adaptive.scraper import AdaptiveBrowserScraper
+        from aloha.services.county_url_resolver import CountyUrlResolver
 
-        base_url = self._guess_assessor_url(state, county)
+        resolver = CountyUrlResolver()
+        base_url = await resolver.resolve(state, county, url_type="assessor")
         if not base_url:
             self.log.info("tier3_skip_no_url", state=state, county=county)
             return []
@@ -254,13 +256,6 @@ class DiscoveryAgent(BaseAgent):
         except Exception as exc:
             self.log.warning("tier3_failed", state=state, county=county, error=str(exc))
             return []
-
-    def _guess_assessor_url(self, state: str, county: str) -> str | None:
-        """Return a best-guess URL for a county assessor portal."""
-        state_l = state.lower()
-        county_l = county.lower().replace(" ", "")
-        # Return the most likely pattern; scraper handles 404s gracefully
-        return f"https://www.{county_l}county{state_l}.gov/propertytax"
 
     async def _auction_scrape(
         self,

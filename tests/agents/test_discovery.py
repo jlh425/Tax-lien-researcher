@@ -102,26 +102,49 @@ class TestDeadlinePriority:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# _guess_assessor_url
+# _tier3_scrape URL resolution (via CountyUrlResolver)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-class TestGuessAssessorUrl:
+class TestTier3UrlResolution:
     @pytest.fixture
     def agent(self):
         return DiscoveryAgent()
 
-    def test_url_format(self, agent):
-        url = agent._guess_assessor_url("FL", "orange")
-        assert url == "https://www.orangecountyfl.gov/propertytax"
+    @pytest.mark.asyncio
+    async def test_uses_resolver_for_known_county(self, agent):
+        """tier3 uses CountyUrlResolver which finds FL/orange in static registry."""
+        from unittest.mock import patch, AsyncMock
 
-    def test_multi_word_county(self, agent):
-        url = agent._guess_assessor_url("CA", "Los Angeles")
-        assert url == "https://www.losangelescountyca.gov/propertytax"
+        with patch(
+            "aloha.services.county_url_resolver.CountyUrlResolver.resolve",
+            new_callable=AsyncMock,
+            return_value="https://www.ocpafl.org",
+        ) as mock_resolve:
+            with patch(
+                "aloha.scrapers.tier3_adaptive.scraper.AdaptiveBrowserScraper.discover",
+                new_callable=AsyncMock,
+                return_value=[],
+            ):
+                from aloha.agents.discovery.state_registry import InstrumentType
+                await agent._tier3_scrape("FL", "orange", InstrumentType.LIEN_CERT, 10)
 
-    def test_case_handling(self, agent):
-        url = agent._guess_assessor_url("TX", "HARRIS")
-        assert "harris" in url
+        mock_resolve.assert_called_once_with("FL", "orange", url_type="assessor")
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_when_no_url(self, agent):
+        """tier3 returns [] when resolver returns None."""
+        from unittest.mock import patch, AsyncMock
+
+        with patch(
+            "aloha.services.county_url_resolver.CountyUrlResolver.resolve",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            from aloha.agents.discovery.state_registry import InstrumentType
+            result = await agent._tier3_scrape("XX", "unknown", InstrumentType.TAX_DEED, 10)
+
+        assert result == []
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -77,6 +77,9 @@ class Settings(BaseSettings):
             return self.llm_provider, parts[0]
         return self.llm_provider, self.llm_model
 
+    # ── Search (SearXNG for county URL discovery) ───────────────────────
+    searxng_url: str = "http://localhost:7900"
+
     # ── External Data APIs ────────────────────────────────────────────────
     cobalt_intelligence_api_key: str | None = None    # SOS entity lookup (all 50 states)
     courtlistener_api_key: str | None = None          # CourtListener REST API (free tier)
