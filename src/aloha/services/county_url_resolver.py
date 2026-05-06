@@ -168,7 +168,7 @@ class CountyUrlResolver:
             log.debug("searxng_search_failed", error=str(exc))
             return []
 
-        results: list[dict[str, Any]] = data.get("results", [])
+        results: list[dict[str, Any]] = data.get("results") or []
         candidates: list[str] = []
 
         for r in results[:10]:
@@ -231,17 +231,22 @@ class CountyUrlResolver:
         self, page_html: str, county: str, state: str, url_type: str
     ) -> bool:
         """Ask Ollama (via OpenAI-compat API) if the page is a tax portal."""
+        provider, model = settings.get_agent_llm("discovery")
         prompt = (
             f"Is this HTML page a {url_type.replace('_', ' ')} portal for "
             f"{county} county, {state}? Answer only YES or NO.\n\n"
             f"HTML snippet:\n{page_html[:2000]}"
         )
         try:
+            base_url = settings.ollama_base_url
+            if provider == "openai-compatible" and settings.openai_compatible_base_url:
+                base_url = settings.openai_compatible_base_url
+
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(
-                    f"{settings.ollama_base_url}/v1/chat/completions",
+                    f"{base_url}/v1/chat/completions",
                     json={
-                        "model": "llama3.1:8b",
+                        "model": model,
                         "messages": [{"role": "user", "content": prompt}],
                         "temperature": 0.0,
                         "max_tokens": 10,
@@ -250,7 +255,10 @@ class CountyUrlResolver:
                 if resp.status_code != 200:
                     return False
                 data = resp.json()
-                answer = data["choices"][0]["message"]["content"].strip().upper()
+                choices = data.get("choices") or []
+                if not choices:
+                    return False
+                answer = choices[0].get("message", {}).get("content", "").strip().upper()
                 return answer.startswith("YES")
         except Exception as exc:
             log.debug("llm_validation_failed", error=str(exc))

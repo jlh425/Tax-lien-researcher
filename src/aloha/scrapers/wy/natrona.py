@@ -115,10 +115,14 @@ def _extract_text(pdf_bytes: bytes) -> str:
     doc.close()
 
     if needs_ocr:
-        # Run the whole PDF through docling's OCR pipeline
+        # Run the whole PDF through docling's OCR pipeline and merge with native text.
+        # Docling returns text for ALL pages, so use it only for pages that lacked text.
         ocr_text = _ocr_pdf(pdf_bytes)
         if ocr_text:
-            return ocr_text
+            ocr_pages = ocr_text.split("\n\n")
+            for i, part in enumerate(text_parts):
+                if not part and i < len(ocr_pages):
+                    text_parts[i] = ocr_pages[i]
 
     return "\n".join(text_parts)
 
