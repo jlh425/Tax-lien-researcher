@@ -1,13 +1,16 @@
-"""Entity Research Agent — pierces LLC/trust/corp structures via SOS data.
+"""Entity Research Agent — pierces LLC/trust/corp structures via SOS, UCC, and court data.
 
 Responsibilities:
 1. Look up the entity in the state Secretary of State database (Cobalt Intelligence)
 2. Extract officers, managers, and registered agent
 3. Detect commercial registered agent services (CT Corp, Northwest, etc.)
 4. Search for related entities sharing the same RA or address
-5. Derive the best beneficial owner name for outreach
-6. Persist the Entity record and link it to the Owner
-7. Enqueue for the Scoring Agent
+5. Search UCC filings for liens against the entity (financial health signal)
+6. Search federal court records for litigation and bankruptcy (CourtListener)
+7. Search state lien records for federal and state tax liens
+8. Derive the best beneficial owner name for outreach
+9. Persist the Entity record (including UCC + litigation data) and link it to the Owner
+10. Enqueue for the Scoring Agent
 """
 
 from __future__ import annotations
@@ -119,7 +122,13 @@ class EntityResearchAgent(BaseAgent):
         # ── Step 3: Related entities ──────────────────────────────────────
         related_entity_ids = await self._find_related_entities(sos_result, state)
 
-        # ── Step 4: Persist Entity record ─────────────────────────────────
+        # ── Step 4: UCC filings ───────────────────────────────────────────
+        ucc_filings = await self._search_ucc_filings(entity_name, state)
+
+        # ── Step 5: Court records / litigation ────────────────────────────
+        litigation_data = await self._search_litigation(entity_name, state)
+
+        # ── Step 6: Persist Entity record ─────────────────────────────────
         entity_id = await self._persist(
             parcel_id=parcel_id,
             owner_id=owner_id,
@@ -128,6 +137,8 @@ class EntityResearchAgent(BaseAgent):
             beneficial_owner=beneficial_owner,
             confidence=confidence,
             related_entity_ids=related_entity_ids,
+            ucc_filings=ucc_filings,
+            litigation_data=litigation_data,
             state=state,
             county=county,
         )
@@ -248,6 +259,198 @@ class EntityResearchAgent(BaseAgent):
             self.log.warning("related_entity_search_failed", error=str(exc))
             return []
 
+    # ── UCC helpers ─────────────────────────────────────────────────────
+
+    async def _search_ucc_filings(
+        self,
+        entity_name: str,
+        state: str,
+    ) -> list[dict[str, Any]]:
+        """Search UCC filings for the entity via the UCC MCP server."""
+        try:
+            from aloha.mcp_servers.ucc.server import create_ucc_server
+
+            server = create_ucc_server()
+        except (ValueError, ImportError) as exc:
+            self.log.warning("ucc_server_unavailable", error=str(exc))
+            return []
+
+        try:
+            result = await server.search_ucc_filings(
+                debtor_name=entity_name, state=state,
+            )
+            filings = result.get("filings", [])
+            self.log.info(
+                "ucc_search_complete",
+                entity_name=entity_name,
+                state=state,
+                count=len(filings),
+            )
+            return filings
+        except Exception as exc:
+            self.log.warning("ucc_search_failed", error=str(exc))
+            return []
+        finally:
+            await server.close()
+
+    # ── Court records / litigation helpers ────────────────────────────────
+
+    async def _search_litigation(
+        self,
+        entity_name: str,
+        state: str,
+    ) -> dict[str, Any]:
+        """Search court records for liens, bankruptcy, and litigation.
+
+        Returns a dict with keys: federal_tax_liens, state_tax_liens,
+        bankruptcy_history, litigation_summary, pacer_results.
+        On any error, returns empty results so the pipeline continues.
+        """
+        empty: dict[str, Any] = {
+            "federal_tax_liens": [],
+            "state_tax_liens": [],
+            "bankruptcy_history": [],
+            "litigation_summary": "",
+            "pacer_results": [],
+        }
+
+        try:
+            from aloha.mcp_servers.court_records.server import (
+                create_court_records_server,
+            )
+
+            server = create_court_records_server()
+        except (ValueError, ImportError) as exc:
+            self.log.warning("court_records_server_unavailable", error=str(exc))
+            return empty
+
+        federal_tax_liens: list[dict[str, Any]] = []
+        state_tax_liens: list[dict[str, Any]] = []
+        bankruptcy_history: list[dict[str, Any]] = []
+        litigation_entries: list[dict[str, Any]] = []
+        pacer_results: list[dict[str, Any]] = []
+
+        try:
+            # ── Federal cases (litigation + bankruptcy) ───────────────
+            federal_result = await server.search_federal_cases(
+                party_name=entity_name, state=state,
+            )
+            cases = federal_result.get("cases", [])
+            pacer_results = cases
+
+            for case in cases:
+                case_type = (case.get("case_type") or "").lower()
+                if case_type == "bankruptcy":
+                    bankruptcy_history.append(case)
+                else:
+                    litigation_entries.append(case)
+
+            # ── State liens (tax liens) ───────────────────────────────
+            lien_result = await server.search_state_liens(
+                debtor_name=entity_name, state=state,
+            )
+            liens = lien_result.get("liens", [])
+
+            for lien in liens:
+                lien_type = (lien.get("lien_type") or "").lower()
+                if lien_type == "federal_tax":
+                    federal_tax_liens.append(lien)
+                elif lien_type == "state_tax":
+                    state_tax_liens.append(lien)
+                else:
+                    # Treat unknown lien types as state tax liens
+                    state_tax_liens.append(lien)
+
+            # ── Build litigation summary ──────────────────────────────
+            summary = self._build_litigation_summary(
+                entity_name=entity_name,
+                federal_tax_liens=federal_tax_liens,
+                state_tax_liens=state_tax_liens,
+                bankruptcy_history=bankruptcy_history,
+                litigation_entries=litigation_entries,
+            )
+
+            self.log.info(
+                "litigation_search_complete",
+                entity_name=entity_name,
+                state=state,
+                federal_liens=len(federal_tax_liens),
+                state_liens=len(state_tax_liens),
+                bankruptcies=len(bankruptcy_history),
+                litigation=len(litigation_entries),
+            )
+
+            return {
+                "federal_tax_liens": federal_tax_liens,
+                "state_tax_liens": state_tax_liens,
+                "bankruptcy_history": bankruptcy_history,
+                "litigation_summary": summary,
+                "pacer_results": pacer_results,
+            }
+        except Exception as exc:
+            self.log.warning(
+                "litigation_search_failed",
+                entity_name=entity_name,
+                state=state,
+                error=str(exc),
+            )
+            return empty
+        finally:
+            await server.close()
+
+    @staticmethod
+    def _build_litigation_summary(
+        *,
+        entity_name: str,
+        federal_tax_liens: list[dict[str, Any]],
+        state_tax_liens: list[dict[str, Any]],
+        bankruptcy_history: list[dict[str, Any]],
+        litigation_entries: list[dict[str, Any]],
+    ) -> str:
+        """Build a brief text digest of all court record findings."""
+        parts: list[str] = [f"Court records summary for {entity_name}:"]
+
+        if not any([
+            federal_tax_liens, state_tax_liens,
+            bankruptcy_history, litigation_entries,
+        ]):
+            return f"No court records found for {entity_name}."
+
+        if federal_tax_liens:
+            total = sum(
+                float(lien.get("amount") or 0) for lien in federal_tax_liens
+            )
+            parts.append(
+                f"- {len(federal_tax_liens)} federal tax lien(s)"
+                + (f" totaling ${total:,.0f}" if total else "")
+            )
+
+        if state_tax_liens:
+            total = sum(
+                float(lien.get("amount") or 0) for lien in state_tax_liens
+            )
+            parts.append(
+                f"- {len(state_tax_liens)} state tax lien(s)"
+                + (f" totaling ${total:,.0f}" if total else "")
+            )
+
+        if bankruptcy_history:
+            titles = [
+                b.get("case_title") or "Unknown"
+                for b in bankruptcy_history[:3]
+            ]
+            parts.append(
+                f"- {len(bankruptcy_history)} bankruptcy case(s): "
+                + "; ".join(titles)
+            )
+
+        if litigation_entries:
+            parts.append(
+                f"- {len(litigation_entries)} other litigation case(s)"
+            )
+
+        return "\n".join(parts)
+
     # ── Persistence ───────────────────────────────────────────────────────
 
     async def _persist(
@@ -260,6 +463,8 @@ class EntityResearchAgent(BaseAgent):
         beneficial_owner: str | None,
         confidence: str,
         related_entity_ids: list[str],
+        ucc_filings: list[dict[str, Any]] | None = None,
+        litigation_data: dict[str, Any] | None = None,
         state: str,
         county: str,
     ) -> int | None:
@@ -279,6 +484,7 @@ class EntityResearchAgent(BaseAgent):
             queue_repo = QueueRepository(session)
 
             # Upsert Entity
+            lit = litigation_data or {}
             entity = Entity(
                 entity_name=entity_name,
                 entity_type=sos_result.get("entity_type"),
@@ -291,6 +497,12 @@ class EntityResearchAgent(BaseAgent):
                 managers_members=sos_result.get("managers_members"),
                 sos_filing_url=sos_result.get("sos_filing_url"),
                 related_entity_ids=related_entity_ids or None,
+                ucc_filings=ucc_filings or None,
+                federal_tax_liens=lit.get("federal_tax_liens") or None,
+                state_tax_liens=lit.get("state_tax_liens") or None,
+                bankruptcy_history=lit.get("bankruptcy_history") or None,
+                litigation_summary=lit.get("litigation_summary") or None,
+                pacer_results=lit.get("pacer_results") or None,
                 content_hash=hashlib.md5(str(sorted(sos_result.items())).encode()).hexdigest(),
                 last_researched_at=now,
                 created_at=now,
