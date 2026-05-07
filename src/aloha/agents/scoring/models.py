@@ -67,6 +67,7 @@ def score_lien_certificate(
     lien: dict[str, Any],
     owner: dict[str, Any],
     state_cert_rate_cap: float | None = None,
+    entity_data: dict[str, Any] | None = None,
 ) -> ScoringResult:
     """Score a tax lien certificate opportunity.
 
@@ -76,6 +77,9 @@ def score_lien_certificate(
               redemption_deadline, years_delinquent, etc.)
         owner: Canonical Owner dict (is_absentee, owner_type, best_phone, etc.)
         state_cert_rate_cap: Maximum certificate rate for the state (e.g. 0.18 = 18%).
+        entity_data: Optional Entity dict with financial health fields
+            (ucc_filings, federal_tax_liens, state_tax_liens, bankruptcy_history,
+            litigation_summary).
 
     Returns:
         ScoringResult with all lien certificate fields populated.
@@ -167,6 +171,16 @@ def score_lien_certificate(
     years_delinquent = lien.get("years_delinquent") or 0
     if isinstance(years_delinquent, (int, float)):
         motivation += min(int(years_delinquent), 4)  # cap at 4 pts
+
+    # ── Financial health signals from Entity ─────────────────────────────
+    if entity_data:
+        _apply_financial_health(
+            entity_data, motivation, flags, flags_detail, rationale_parts,
+        )
+        motivation = flags_detail.get("_motivation_after_entity", motivation)
+        # Clean up internal key
+        flags_detail.pop("_motivation_after_entity", None)
+
     motivation = min(motivation, 10)
     motivation_pts = round(motivation * 2)
     rationale_parts.append(f"motivation={motivation}/10 → {motivation_pts}/20pts")
@@ -232,6 +246,7 @@ def score_tax_deed(
     lien: dict[str, Any],
     owner: dict[str, Any],
     post_sale_redemption_days: int = 0,
+    entity_data: dict[str, Any] | None = None,
 ) -> ScoringResult:
     """Score a tax deed auction opportunity.
 
@@ -240,6 +255,9 @@ def score_tax_deed(
         lien: Canonical TaxLien dict (opening_bid, auction_date, title_risk_level).
         owner: Canonical Owner dict.
         post_sale_redemption_days: Days owner can redeem after sale (from state registry).
+        entity_data: Optional Entity dict with financial health fields
+            (ucc_filings, federal_tax_liens, state_tax_liens, bankruptcy_history,
+            litigation_summary).
 
     Returns:
         ScoringResult with all tax deed fields populated.
@@ -358,6 +376,15 @@ def score_tax_deed(
         competition_pts = 6
     rationale_parts.append(f"competition≈{competition_val}/10 → {competition_pts}/10pts")
 
+    # ── 6. Financial Health (owner motivation + risk flags) ────────────────
+    motivation = 0
+    if entity_data:
+        _apply_financial_health(
+            entity_data, motivation, flags, flags_detail, rationale_parts,
+        )
+        motivation = flags_detail.pop("_motivation_after_entity", motivation)
+    motivation = min(motivation, 10)
+
     # ── Composite ─────────────────────────────────────────────────────────
     raw = ratio_score + title_pts + redemption_pts + condition_pts + competition_pts
     overall = min(max(raw, 0), 100)
@@ -376,7 +403,10 @@ def score_tax_deed(
         risk += 2
     risk = min(risk, 10)
 
-    potential_map = {"residential": 8, "commercial": 7, "land": 6, "industrial": 5, "agricultural": 4}
+    potential_map = {
+        "residential": 8, "commercial": 7, "land": 6,
+        "industrial": 5, "agricultural": 4,
+    }
     potential = potential_map.get(property_type, 5)
 
     return ScoringResult(
@@ -392,7 +422,73 @@ def score_tax_deed(
         condition_risk=condition_val,
         competition_risk=competition_val,
         post_sale_redemption_risk=redemption_val,
+        owner_motivation=motivation,
         risk_flags=flags,
         flags_detail=flags_detail,
         score_rationale=" | ".join(rationale_parts),
     )
+
+
+# ── Shared Financial Health Helper ────────────────────────────────────────────
+
+def _apply_financial_health(
+    entity_data: dict[str, Any],
+    motivation: int,
+    flags: list[str],
+    flags_detail: dict[str, Any],
+    rationale_parts: list[str],
+) -> None:
+    """Apply financial health signals from entity data to scoring components.
+
+    Mutates *flags*, *flags_detail*, and *rationale_parts* in place.
+    Stores the updated motivation value in ``flags_detail["_motivation_after_entity"]``
+    so the caller can retrieve it (avoids returning a tuple).
+    """
+    health_notes: list[str] = []
+
+    # UCC filings → financial stress signal
+    ucc = entity_data.get("ucc_filings")
+    if ucc and isinstance(ucc, list) and len(ucc) > 0:
+        motivation += 2
+        flags.append("entity_ucc_filings")
+        flags_detail["entity_ucc_filing_count"] = len(ucc)
+        health_notes.append(f"{len(ucc)} UCC filing(s)")
+
+    # Federal / state tax liens → very motivated seller
+    fed_liens = entity_data.get("federal_tax_liens") or []
+    state_liens = entity_data.get("state_tax_liens") or []
+    all_tax_liens = (
+        (fed_liens if isinstance(fed_liens, list) else [])
+        + (state_liens if isinstance(state_liens, list) else [])
+    )
+    if all_tax_liens:
+        motivation += 3
+        total_amount = sum(
+            float(tl.get("amount") or 0) for tl in all_tax_liens
+        )
+        flags.append("entity_tax_liens")
+        flags_detail["entity_tax_lien_total"] = round(total_amount, 2)
+        health_notes.append(
+            f"{len(all_tax_liens)} tax lien(s) totalling ${total_amount:,.0f}"
+        )
+
+    # Bankruptcy history → distressed
+    bankruptcy = entity_data.get("bankruptcy_history")
+    if bankruptcy and isinstance(bankruptcy, list) and len(bankruptcy) > 0:
+        motivation += 2
+        flags.append("entity_bankruptcy")
+        health_notes.append(f"{len(bankruptcy)} bankruptcy case(s)")
+
+    # Litigation summary → active litigation flag
+    litigation = entity_data.get("litigation_summary") or ""
+    if isinstance(litigation, str) and litigation.strip():
+        flags.append("entity_active_litigation")
+        health_notes.append("active litigation noted")
+
+    if health_notes:
+        rationale_parts.append(
+            "Financial health: " + "; ".join(health_notes)
+        )
+
+    # Store updated motivation for caller
+    flags_detail["_motivation_after_entity"] = motivation

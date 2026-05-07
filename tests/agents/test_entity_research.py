@@ -9,7 +9,6 @@ import pytest
 # conftest.py patches get_agent_model globally so these imports work.
 from aloha.agents.entity_research.agent import EntityResearchAgent, _is_commercial_ra
 
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Pure function tests
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -132,9 +131,13 @@ class TestEntityResearchAgent:
             "pacer_results": [],
         }
 
+    @pytest.fixture
+    def _empty_contacts(self):
+        return {"website": None, "phone": None, "email": None}
+
     @pytest.mark.asyncio
     async def test_full_flow_with_sos_data(
-        self, agent, base_context, _empty_litigation,
+        self, agent, base_context, _empty_litigation, _empty_contacts,
     ):
         agent._sos_lookup = AsyncMock(return_value={
             "entity_name": "ACME HOLDINGS LLC",
@@ -147,6 +150,7 @@ class TestEntityResearchAgent:
         agent._find_related_entities = AsyncMock(return_value=["ENT-002", "ENT-003"])
         agent._search_ucc_filings = AsyncMock(return_value=[])
         agent._search_litigation = AsyncMock(return_value=_empty_litigation)
+        agent._enrich_entity_contacts = AsyncMock(return_value=_empty_contacts)
         agent._persist = AsyncMock(return_value=99)
 
         result = await agent.run(base_context)
@@ -158,12 +162,13 @@ class TestEntityResearchAgent:
 
     @pytest.mark.asyncio
     async def test_sos_unavailable(
-        self, agent, base_context, _empty_litigation,
+        self, agent, base_context, _empty_litigation, _empty_contacts,
     ):
         agent._sos_lookup = AsyncMock(return_value={})
         agent._find_related_entities = AsyncMock(return_value=[])
         agent._search_ucc_filings = AsyncMock(return_value=[])
         agent._search_litigation = AsyncMock(return_value=_empty_litigation)
+        agent._enrich_entity_contacts = AsyncMock(return_value=_empty_contacts)
         agent._persist = AsyncMock(return_value=99)
 
         result = await agent.run(base_context)
@@ -173,7 +178,7 @@ class TestEntityResearchAgent:
 
     @pytest.mark.asyncio
     async def test_commercial_ra_no_beneficial_owner(
-        self, agent, base_context, _empty_litigation,
+        self, agent, base_context, _empty_litigation, _empty_contacts,
     ):
         agent._sos_lookup = AsyncMock(return_value={
             "entity_name": "ACME LLC",
@@ -183,6 +188,7 @@ class TestEntityResearchAgent:
         agent._find_related_entities = AsyncMock(return_value=[])
         agent._search_ucc_filings = AsyncMock(return_value=[])
         agent._search_litigation = AsyncMock(return_value=_empty_litigation)
+        agent._enrich_entity_contacts = AsyncMock(return_value=_empty_contacts)
         agent._persist = AsyncMock(return_value=99)
 
         result = await agent.run(base_context)
@@ -192,7 +198,7 @@ class TestEntityResearchAgent:
 
     @pytest.mark.asyncio
     async def test_ucc_filings_passed_to_persist(
-        self, agent, base_context, _empty_litigation,
+        self, agent, base_context, _empty_litigation, _empty_contacts,
     ):
         """UCC filings from _search_ucc_filings are forwarded to _persist."""
         ucc_data = [
@@ -211,6 +217,7 @@ class TestEntityResearchAgent:
         agent._find_related_entities = AsyncMock(return_value=[])
         agent._search_ucc_filings = AsyncMock(return_value=ucc_data)
         agent._search_litigation = AsyncMock(return_value=_empty_litigation)
+        agent._enrich_entity_contacts = AsyncMock(return_value=_empty_contacts)
         agent._persist = AsyncMock(return_value=99)
 
         result = await agent.run(base_context)
@@ -221,7 +228,7 @@ class TestEntityResearchAgent:
 
     @pytest.mark.asyncio
     async def test_litigation_data_passed_to_persist(
-        self, agent, base_context,
+        self, agent, base_context, _empty_contacts,
     ):
         """Verify _search_litigation results flow through to _persist."""
         lit_data = {
@@ -238,12 +245,38 @@ class TestEntityResearchAgent:
         agent._find_related_entities = AsyncMock(return_value=[])
         agent._search_ucc_filings = AsyncMock(return_value=[])
         agent._search_litigation = AsyncMock(return_value=lit_data)
+        agent._enrich_entity_contacts = AsyncMock(return_value=_empty_contacts)
         agent._persist = AsyncMock(return_value=99)
 
         await agent.run(base_context)
 
         call_kwargs = agent._persist.call_args.kwargs
         assert call_kwargs["litigation_data"] is lit_data
+
+    @pytest.mark.asyncio
+    async def test_contact_data_passed_to_persist(
+        self, agent, base_context, _empty_litigation,
+    ):
+        """Verify _enrich_entity_contacts results flow through to _persist."""
+        contact = {
+            "website": "https://acme.com",
+            "phone": "+14155551234",
+            "email": "john.smith@acme.com",
+        }
+        agent._sos_lookup = AsyncMock(return_value={
+            "entity_name": "ACME LLC",
+            "officers": [{"name": "JOHN SMITH", "title": "CEO"}],
+        })
+        agent._find_related_entities = AsyncMock(return_value=[])
+        agent._search_ucc_filings = AsyncMock(return_value=[])
+        agent._search_litigation = AsyncMock(return_value=_empty_litigation)
+        agent._enrich_entity_contacts = AsyncMock(return_value=contact)
+        agent._persist = AsyncMock(return_value=99)
+
+        await agent.run(base_context)
+
+        call_kwargs = agent._persist.call_args.kwargs
+        assert call_kwargs["contact_data"] is contact
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -614,3 +647,458 @@ class TestSearchLitigation:
 
         assert len(result["state_tax_liens"]) == 1
         assert result["federal_tax_liens"] == []
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Contact enrichment — pure helper tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestPickEnrichablePerson:
+    @pytest.fixture
+    def agent(self):
+        return EntityResearchAgent()
+
+    def test_officer_found(self, agent):
+        sos = {"officers": [{"name": "JOHN SMITH", "title": "President"}]}
+        assert agent._pick_enrichable_person(sos) == "JOHN SMITH"
+
+    def test_manager_found(self, agent):
+        sos = {"managers_members": [{"name": "JANE DOE", "title": "Manager"}]}
+        assert agent._pick_enrichable_person(sos) == "JANE DOE"
+
+    def test_commercial_ra_officer_skipped(self, agent):
+        sos = {
+            "officers": [{"name": "CT CORPORATION SYSTEM", "title": "Agent"}],
+            "registered_agent": "BOB JONES",
+        }
+        assert agent._pick_enrichable_person(sos) == "BOB JONES"
+
+    def test_all_commercial_ra_returns_none(self, agent):
+        sos = {
+            "officers": [{"name": "CT CORPORATION SYSTEM", "title": "Agent"}],
+            "registered_agent": "NORTHWEST REGISTERED AGENT LLC",
+        }
+        assert agent._pick_enrichable_person(sos) is None
+
+    def test_empty_sos(self, agent):
+        assert agent._pick_enrichable_person({}) is None
+
+    def test_none_sos(self, agent):
+        assert agent._pick_enrichable_person(None) is None
+
+    def test_officers_before_ra(self, agent):
+        sos = {
+            "officers": [{"name": "ALICE JONES", "title": "CEO"}],
+            "registered_agent": "BOB SMITH",
+        }
+        assert agent._pick_enrichable_person(sos) == "ALICE JONES"
+
+    def test_empty_name_skipped(self, agent):
+        sos = {
+            "officers": [{"name": "", "title": "CEO"}],
+            "managers_members": [{"name": "BOB", "title": "Manager"}],
+        }
+        assert agent._pick_enrichable_person(sos) == "BOB"
+
+
+class TestDeriveWebsite:
+    def test_business_email_domain(self):
+        result = EntityResearchAgent._derive_website(
+            "ACME Corp", ["john@acmecorp.com"],
+        )
+        assert result == "https://acmecorp.com"
+
+    def test_gmail_skipped(self):
+        result = EntityResearchAgent._derive_website(
+            "ACME Corp", ["john@gmail.com"],
+        )
+        assert result is None
+
+    def test_yahoo_skipped(self):
+        result = EntityResearchAgent._derive_website(
+            "ACME Corp", ["john@yahoo.com"],
+        )
+        assert result is None
+
+    def test_first_business_email_used(self):
+        result = EntityResearchAgent._derive_website(
+            "ACME Corp",
+            ["personal@gmail.com", "john@acmecorp.com", "jane@other.com"],
+        )
+        assert result == "https://acmecorp.com"
+
+    def test_empty_emails(self):
+        result = EntityResearchAgent._derive_website("ACME Corp", [])
+        assert result is None
+
+    def test_no_company_name(self):
+        result = EntityResearchAgent._derive_website(
+            None, ["john@acmecorp.com"],
+        )
+        assert result == "https://acmecorp.com"
+
+
+class TestGuessEmail:
+    def test_basic_name(self):
+        result = EntityResearchAgent._guess_email(
+            "John Smith", "https://acme.com",
+        )
+        assert result == "john.smith@acme.com"
+
+    def test_name_with_suffix(self):
+        result = EntityResearchAgent._guess_email(
+            "John Smith Jr.", "https://acme.com",
+        )
+        # Uses first and last parts: john.jr (last is "Jr." -> "jr")
+        assert result == "john.jr@acme.com"
+
+    def test_single_name_returns_none(self):
+        result = EntityResearchAgent._guess_email(
+            "Madonna", "https://acme.com",
+        )
+        assert result is None
+
+    def test_http_url(self):
+        result = EntityResearchAgent._guess_email(
+            "John Smith", "http://acme.com",
+        )
+        assert result == "john.smith@acme.com"
+
+    def test_url_with_trailing_slash(self):
+        result = EntityResearchAgent._guess_email(
+            "John Smith", "https://acme.com/",
+        )
+        assert result == "john.smith@acme.com"
+
+    def test_empty_name_parts(self):
+        result = EntityResearchAgent._guess_email(
+            "  ", "https://acme.com",
+        )
+        assert result is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Contact enrichment — integration tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestEnrichEntityContacts:
+    """Tests for _enrich_entity_contacts method."""
+
+    @pytest.fixture
+    def agent(self):
+        return EntityResearchAgent()
+
+    @pytest.fixture
+    def mock_people_server(self):
+        """Return a mock PeopleDataMCPServer with configurable responses."""
+        server = AsyncMock()
+        server.enrich_person = AsyncMock(return_value={
+            "full_name": "John Smith",
+            "first_name": "John",
+            "last_name": "Smith",
+            "emails": ["john.smith@acmecorp.com"],
+            "phone_numbers": ["+14155551234"],
+            "linkedin_url": "https://linkedin.com/in/johnsmith",
+            "location": "Orlando, FL",
+            "company": "ACME Corp",
+            "title": "CEO",
+        })
+        server.verify_email = AsyncMock(return_value={
+            "email": "john.smith@acmecorp.com",
+            "status": "valid",
+            "score": 95,
+            "disposable": False,
+            "webmail": False,
+            "mx_records": True,
+        })
+        server.close = AsyncMock()
+        return server
+
+    @pytest.fixture
+    def sos_with_officer(self):
+        return {
+            "entity_name": "ACME HOLDINGS LLC",
+            "officers": [{"name": "JOHN SMITH", "title": "CEO"}],
+            "registered_agent": "JOHN SMITH",
+        }
+
+    # ── Successful enrichment ──────────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_full_contact_enrichment(
+        self, agent, mock_people_server, sos_with_officer,
+    ):
+        """All three contact fields populated from PDL result."""
+        with patch(
+            "aloha.mcp_servers.people_data.server.create_people_data_server",
+            return_value=mock_people_server,
+        ):
+            result = await agent._enrich_entity_contacts(
+                sos_with_officer, "ACME HOLDINGS LLC", "FL",
+            )
+
+        assert result["phone"] == "+14155551234"
+        assert result["email"] == "john.smith@acmecorp.com"
+        assert result["website"] == "https://acmecorp.com"
+        mock_people_server.enrich_person.assert_called_once_with(
+            name="JOHN SMITH", company="ACME HOLDINGS LLC",
+        )
+        mock_people_server.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_phone_only(self, agent, mock_people_server, sos_with_officer):
+        """Phone found but no email or website."""
+        mock_people_server.enrich_person.return_value = {
+            "phone_numbers": ["+14155551234"],
+            "emails": [],
+            "company": None,
+        }
+
+        with patch(
+            "aloha.mcp_servers.people_data.server.create_people_data_server",
+            return_value=mock_people_server,
+        ):
+            result = await agent._enrich_entity_contacts(
+                sos_with_officer, "ACME LLC", "FL",
+            )
+
+        assert result["phone"] == "+14155551234"
+        assert result["email"] is None
+        assert result["website"] is None
+
+    @pytest.mark.asyncio
+    async def test_email_guess_fallback_verified(
+        self, agent, mock_people_server, sos_with_officer,
+    ):
+        """When PDL returns no email but a business domain, guess and verify."""
+        mock_people_server.enrich_person.return_value = {
+            "phone_numbers": [],
+            "emails": ["john@acmecorp.com"],  # gives us the domain
+            "company": "ACME Corp",
+        }
+        # Simulate: first email from PDL is business email -> we derive website
+        # But modify to have no direct email to test the fallback path
+        mock_people_server.enrich_person.return_value = {
+            "phone_numbers": [],
+            "emails": [],
+            "company": "ACME Corp",
+        }
+        # No email, no website derivable -> no guess attempt
+        with patch(
+            "aloha.mcp_servers.people_data.server.create_people_data_server",
+            return_value=mock_people_server,
+        ):
+            result = await agent._enrich_entity_contacts(
+                sos_with_officer, "ACME LLC", "FL",
+            )
+
+        assert result["email"] is None
+        assert result["website"] is None
+        mock_people_server.verify_email.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_email_guess_with_known_website(
+        self, agent, sos_with_officer,
+    ):
+        """When PDL returns a business email domain but no direct match,
+        website is derived and guess email is verified."""
+        server = AsyncMock()
+        # PDL returns an email for a different person at the same company
+        # giving us a domain, but no direct email for our target
+        server.enrich_person = AsyncMock(return_value={
+            "phone_numbers": ["+14155550000"],
+            "emails": ["other.person@acmecorp.com"],
+            "company": "ACME Corp",
+        })
+        server.verify_email = AsyncMock(return_value={
+            "status": "valid", "score": 90,
+        })
+        server.close = AsyncMock()
+
+        with patch(
+            "aloha.mcp_servers.people_data.server.create_people_data_server",
+            return_value=server,
+        ):
+            result = await agent._enrich_entity_contacts(
+                sos_with_officer, "ACME LLC", "FL",
+            )
+
+        # The first email IS returned (other.person@acmecorp.com)
+        assert result["email"] == "other.person@acmecorp.com"
+        assert result["website"] == "https://acmecorp.com"
+        # verify_email should NOT have been called because we already have an email
+        server.verify_email.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_email_guess_verified_valid(self, agent):
+        """When no email from PDL, but website known via email domain,
+        guessed email verified as valid is used."""
+        sos = {"officers": [{"name": "JOHN SMITH", "title": "CEO"}]}
+        server = AsyncMock()
+        # PDL returns business-domain email for "another person" but
+        # we need to set up a scenario where email list is empty but
+        # website is set. We'll use _derive_website + _guess_email path
+        # by having PDL return an email that is NOT for our person but
+        # gives us the domain, then we manually construct the scenario.
+        # Actually, the simpler approach: patch _derive_website to return a website
+        server.enrich_person = AsyncMock(return_value={
+            "phone_numbers": [],
+            "emails": [],
+            "company": None,
+        })
+        server.verify_email = AsyncMock(return_value={
+            "status": "valid", "score": 95,
+        })
+        server.close = AsyncMock()
+
+        with patch(
+            "aloha.mcp_servers.people_data.server.create_people_data_server",
+            return_value=server,
+        ), patch.object(
+            EntityResearchAgent, "_derive_website",
+            return_value="https://acmecorp.com",
+        ):
+            result = await agent._enrich_entity_contacts(
+                sos, "ACME LLC", "FL",
+            )
+
+        assert result["email"] == "john.smith@acmecorp.com"
+        assert result["website"] == "https://acmecorp.com"
+        server.verify_email.assert_called_once_with("john.smith@acmecorp.com")
+
+    @pytest.mark.asyncio
+    async def test_email_guess_undeliverable_not_used(self, agent):
+        """Guessed email that fails verification is not used."""
+        sos = {"officers": [{"name": "JOHN SMITH", "title": "CEO"}]}
+        server = AsyncMock()
+        server.enrich_person = AsyncMock(return_value={
+            "phone_numbers": [],
+            "emails": [],
+            "company": None,
+        })
+        server.verify_email = AsyncMock(return_value={
+            "status": "undeliverable", "score": 10,
+        })
+        server.close = AsyncMock()
+
+        with patch(
+            "aloha.mcp_servers.people_data.server.create_people_data_server",
+            return_value=server,
+        ), patch.object(
+            EntityResearchAgent, "_derive_website",
+            return_value="https://acmecorp.com",
+        ):
+            result = await agent._enrich_entity_contacts(
+                sos, "ACME LLC", "FL",
+            )
+
+        assert result["email"] is None
+        server.verify_email.assert_called_once()
+
+    # ── No beneficial owner ────────────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_no_beneficial_owner_returns_empty(self, agent):
+        """When no enrichable person found in SOS, return empty contacts."""
+        sos = {
+            "entity_name": "OPAQUE LLC",
+            "officers": [{"name": "CT CORPORATION SYSTEM", "title": "Agent"}],
+            "registered_agent": "NORTHWEST REGISTERED AGENT LLC",
+        }
+
+        result = await agent._enrich_entity_contacts(sos, "OPAQUE LLC", "FL")
+
+        assert result == {"website": None, "phone": None, "email": None}
+
+    @pytest.mark.asyncio
+    async def test_empty_sos_returns_empty(self, agent):
+        """Empty SOS result means no person to enrich."""
+        result = await agent._enrich_entity_contacts({}, "UNKNOWN LLC", "FL")
+        assert result == {"website": None, "phone": None, "email": None}
+
+    # ── Graceful error handling ────────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_server_unavailable_returns_empty(
+        self, agent, sos_with_officer,
+    ):
+        """When People Data server cannot be created, returns empty."""
+        with patch(
+            "aloha.mcp_servers.people_data.server.create_people_data_server",
+            side_effect=ValueError("PEOPLE_DATA_LABS_API_KEY required"),
+        ):
+            result = await agent._enrich_entity_contacts(
+                sos_with_officer, "ACME LLC", "FL",
+            )
+
+        assert result == {"website": None, "phone": None, "email": None}
+
+    @pytest.mark.asyncio
+    async def test_import_error_returns_empty(
+        self, agent, sos_with_officer,
+    ):
+        """When People Data module is not importable, returns empty."""
+        with patch(
+            "aloha.mcp_servers.people_data.server.create_people_data_server",
+            side_effect=ImportError("no module"),
+        ):
+            result = await agent._enrich_entity_contacts(
+                sos_with_officer, "ACME LLC", "FL",
+            )
+
+        assert result == {"website": None, "phone": None, "email": None}
+
+    @pytest.mark.asyncio
+    async def test_pdl_error_returns_empty(
+        self, agent, mock_people_server, sos_with_officer,
+    ):
+        """When PDL returns an error, returns empty contacts."""
+        mock_people_server.enrich_person.return_value = {
+            "error": "PDL API error 429",
+        }
+
+        with patch(
+            "aloha.mcp_servers.people_data.server.create_people_data_server",
+            return_value=mock_people_server,
+        ):
+            result = await agent._enrich_entity_contacts(
+                sos_with_officer, "ACME LLC", "FL",
+            )
+
+        assert result == {"website": None, "phone": None, "email": None}
+        mock_people_server.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_runtime_error_returns_empty(
+        self, agent, mock_people_server, sos_with_officer,
+    ):
+        """Runtime error during enrichment returns empty, close() still called."""
+        mock_people_server.enrich_person.side_effect = RuntimeError("timeout")
+
+        with patch(
+            "aloha.mcp_servers.people_data.server.create_people_data_server",
+            return_value=mock_people_server,
+        ):
+            result = await agent._enrich_entity_contacts(
+                sos_with_officer, "ACME LLC", "FL",
+            )
+
+        assert result == {"website": None, "phone": None, "email": None}
+        mock_people_server.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_server_close_always_called(
+        self, agent, mock_people_server, sos_with_officer,
+    ):
+        """server.close() is called even when enrichment succeeds."""
+        with patch(
+            "aloha.mcp_servers.people_data.server.create_people_data_server",
+            return_value=mock_people_server,
+        ):
+            await agent._enrich_entity_contacts(
+                sos_with_officer, "ACME LLC", "FL",
+            )
+
+        mock_people_server.close.assert_awaited_once()

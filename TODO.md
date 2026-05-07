@@ -28,108 +28,10 @@
 
 ## Tier 4 — Business Intelligence (Entity Research expansion)
 
-The Entity Research Agent currently does SOS lookups only. The UCC and Court Records
-MCP servers are **already built** but not wired into the agent. The Entity model has
-JSONB fields ready to receive data. This tier connects the plumbing.
-
-### 4.1 — Wire UCC MCP server into Entity Research Agent
-
-**Goal**: Search for UCC filings (secured debts, liens on assets) for every entity the
-agent researches. Populates `Entity.ucc_filings`.
-
-**Files to change**:
-- `src/aloha/agents/entity_research/agent.py`
-  - Add `_search_ucc_filings(entity_name, state)` helper method
-  - Instantiate UCC server via `from aloha.mcp_servers.ucc.server import create_ucc_server`
-  - Call `search_ucc_filings(debtor_name=entity_name, state=state)` on the server
-  - Add step between `_find_related_entities()` and `_persist()` in `run()`
-  - Update `_persist()` to store results in `entity.ucc_filings` (JSONB)
-- `src/aloha/agents/entity_research/prompts.py` — mention UCC research in system prompt
-
-**Pattern to follow**: Look at `_sos_lookup()` and `_find_related_entities()` — they
-dynamically import and instantiate the SOS server the same way.
-
-**Graceful degradation**: UCC server works without API key (Playwright scraper fallback
-for FL, IL, OH). Wrap in try/except, log failures, continue agent run.
-
-**Data shape** (from UCC server):
-```json
-[{
-  "filing_number": "2024-123456",
-  "filing_date": "2024-01-15",
-  "lapse_date": "2029-01-15",
-  "filing_type": "initial",
-  "debtor_name": "Entity Name Inc",
-  "secured_party": "Bank of America",
-  "collateral": "All assets and accounts receivable",
-  "state": "FL"
-}]
-```
-
-**Tests**: `tests/agents/test_entity_research.py`
-- Mock `create_ucc_server()` → verify filings stored in Entity.ucc_filings
-- Test graceful fallback when UCC server raises
-
----
-
-### 4.2 — Wire Court Records MCP server into Entity Research Agent
-
-**Goal**: Search for federal litigation, state tax liens, and judgment liens for every
-entity. Populates `Entity.federal_tax_liens`, `Entity.state_tax_liens`,
-`Entity.litigation_summary`, `Entity.bankruptcy_history`.
-
-**Files to change**:
-- `src/aloha/agents/entity_research/agent.py`
-  - Add `_search_litigation(entity_name, state)` helper method
-  - Instantiate court records server via `from aloha.mcp_servers.court_records.server import create_court_records_server`
-  - Call `search_federal_cases(party_name=entity_name, state=state)` for litigation + bankruptcy
-  - Call `search_state_liens(debtor_name=entity_name, state=state)` for tax liens
-  - Filter results: separate federal_tax_liens, state_tax_liens, bankruptcy, general litigation
-  - Build `litigation_summary` text from aggregated results
-  - Update `_persist()` to store in Entity model fields
-- `src/aloha/agents/entity_research/prompts.py` — mention litigation/lien research
-
-**Data shape** (from Court Records server):
-```json
-// Federal cases
-[{
-  "case_id": "12345",
-  "case_title": "US v. Entity Name Inc",
-  "court": "N.D. Fla.",
-  "case_type": "bankruptcy",
-  "filing_date": "2024-01-15",
-  "status": "pending",
-  "parties": [{"name": "Entity Name Inc", "role": "debtor"}],
-  "docket_url": "https://..."
-}]
-
-// State liens
-[{
-  "filing_number": "2024-001234",
-  "debtor": "Entity Name Inc",
-  "creditor": "IRS",
-  "amount": 50000.00,
-  "filing_date": "2024-03-01",
-  "lien_type": "federal_tax",
-  "state": "FL"
-}]
-```
-
-**Filtering logic**:
-- `lien_type == "federal_tax"` → `Entity.federal_tax_liens`
-- `lien_type == "state_tax"` → `Entity.state_tax_liens`
-- `case_type == "bankruptcy"` → `Entity.bankruptcy_history`
-- Everything else → `Entity.litigation_summary` (formatted text)
-
-**Graceful degradation**: Court Records server works without API key (Playwright scraper
-fallback for FL, TX state liens). Federal case search requires `COURTLISTENER_API_KEY`
-(free at courtlistener.com).
-
-**Tests**: `tests/agents/test_entity_research.py`
-- Mock `create_court_records_server()` → verify fields populated correctly
-- Test lien type filtering logic
-- Test bankruptcy detection
-- Test graceful fallback when server unavailable
+- [x] **4.1 — Wire UCC MCP server** — search_ucc_filings integrated into Entity Research Agent (commit `8ce9880`)
+- [x] **4.2 — Wire Court Records MCP server** — federal cases, state liens, bankruptcy filtered into Entity fields (commit `8ce9880`)
+- [ ] **4.3 — Scoring Agent financial health signals** — Factor UCC, liens, bankruptcy into scoring models
+- [ ] **4.4 — Business Contact Enrichment** — Populate Entity.website/phone/email via People Data Labs
 
 ---
 
@@ -171,9 +73,9 @@ to business entities (currently only individual owners get contact enrichment).
 ### Implementation order
 
 ```
-4.1 (UCC filings)  →  4.2 (litigation/liens)  →  4.3 (scoring)  →  4.4 (contacts)
-     ~2-3 hours           ~3-4 hours                ~1-2 hours         ~TBD
+4.1 (UCC filings)  ✅  →  4.3 (scoring)  →  4.4 (contacts)
+4.2 (litigation)   ✅       ~1-2 hours         ~TBD
 ```
 
-4.1 and 4.2 are independent and can be built in parallel. 4.3 depends on both.
+4.1 and 4.2 are done. 4.3 depends on both (now unblocked).
 4.4 is a separate initiative requiring API evaluation.

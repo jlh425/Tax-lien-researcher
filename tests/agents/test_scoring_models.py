@@ -198,6 +198,219 @@ class TestTaxDeedModel:
         assert result.condition_risk >= 7
 
 
+# ── Financial health scoring tests (lien certificate) ────────────────────────
+
+
+class TestLienCertFinancialHealth:
+    """Tests for entity financial health signals in lien certificate scoring."""
+
+    @pytest.fixture
+    def _parcel(self):
+        return {
+            "parcel_id": "FH-001",
+            "property_type": "residential",
+            "assessed_total": 200_000,
+        }
+
+    @pytest.fixture
+    def _lien(self):
+        return {
+            "instrument_type": "lien_certificate",
+            "total_owed": 4_000,
+            "principal_amount": 3_500,
+            "certificate_interest_rate": 0.18,
+            "years_delinquent": 1,
+        }
+
+    @pytest.fixture
+    def _owner(self):
+        return {
+            "owner_type": "llc",
+            "is_absentee": False,
+            "mailing_address": "123 Elm St",
+            "best_phone": "555-1234",
+            "best_email": None,
+        }
+
+    def test_ucc_filings_boost_motivation(self, _parcel, _lien, _owner):
+        entity = {"ucc_filings": [{"debtor": "Acme LLC", "secured": "Bank A"}]}
+        result_with = score_lien_certificate(_parcel, _lien, _owner, entity_data=entity)
+        result_without = score_lien_certificate(_parcel, _lien, _owner, entity_data=None)
+        assert result_with.owner_motivation > result_without.owner_motivation
+        assert "entity_ucc_filings" in result_with.risk_flags
+        assert result_with.flags_detail["entity_ucc_filing_count"] == 1
+
+    def test_tax_liens_boost_motivation_and_flag(self, _parcel, _lien, _owner):
+        entity = {
+            "federal_tax_liens": [{"amount": 15_000}],
+            "state_tax_liens": [{"amount": 8_000}],
+        }
+        result = score_lien_certificate(_parcel, _lien, _owner, entity_data=entity)
+        without = score_lien_certificate(_parcel, _lien, _owner, entity_data=None)
+        assert result.owner_motivation > without.owner_motivation
+        assert "entity_tax_liens" in result.risk_flags
+        assert result.flags_detail["entity_tax_lien_total"] == 23_000.0
+
+    def test_bankruptcy_adds_flag_and_boosts(self, _parcel, _lien, _owner):
+        entity = {"bankruptcy_history": [{"case": "Ch7", "year": 2022}]}
+        result = score_lien_certificate(_parcel, _lien, _owner, entity_data=entity)
+        assert "entity_bankruptcy" in result.risk_flags
+        without = score_lien_certificate(_parcel, _lien, _owner, entity_data=None)
+        assert result.owner_motivation > without.owner_motivation
+
+    def test_litigation_summary_adds_flag(self, _parcel, _lien, _owner):
+        entity = {"litigation_summary": "2 pending civil cases in Orange County"}
+        result = score_lien_certificate(_parcel, _lien, _owner, entity_data=entity)
+        assert "entity_active_litigation" in result.risk_flags
+
+    def test_empty_litigation_no_flag(self, _parcel, _lien, _owner):
+        entity = {"litigation_summary": ""}
+        result = score_lien_certificate(_parcel, _lien, _owner, entity_data=entity)
+        assert "entity_active_litigation" not in result.risk_flags
+
+    def test_none_entity_data_backward_compatible(self, _parcel, _lien, _owner):
+        """Passing entity_data=None must produce the same result as before."""
+        result_none = score_lien_certificate(_parcel, _lien, _owner, entity_data=None)
+        result_default = score_lien_certificate(_parcel, _lien, _owner)
+        assert result_none.overall_score == result_default.overall_score
+        assert result_none.owner_motivation == result_default.owner_motivation
+        assert result_none.risk_flags == result_default.risk_flags
+
+    def test_all_financial_signals_combined(self, _parcel, _lien, _owner):
+        entity = {
+            "ucc_filings": [{"debtor": "X"}, {"debtor": "Y"}],
+            "federal_tax_liens": [{"amount": 50_000}],
+            "state_tax_liens": [],
+            "bankruptcy_history": [{"case": "Ch11"}],
+            "litigation_summary": "Breach of contract suit filed 2024",
+        }
+        result = score_lien_certificate(_parcel, _lien, _owner, entity_data=entity)
+        assert "entity_ucc_filings" in result.risk_flags
+        assert "entity_tax_liens" in result.risk_flags
+        assert "entity_bankruptcy" in result.risk_flags
+        assert "entity_active_litigation" in result.risk_flags
+        assert "Financial health:" in result.score_rationale
+
+    def test_motivation_capped_at_10(self, _parcel, _lien):
+        """Even with all boosts, motivation should never exceed 10."""
+        owner = {
+            "owner_type": "llc",
+            "is_absentee": True,
+            "mailing_address": "123 Elm",
+            "best_phone": None,
+            "best_email": None,
+        }
+        lien = {**_lien, "years_delinquent": 5}
+        entity = {
+            "ucc_filings": [{"x": 1}],
+            "federal_tax_liens": [{"amount": 100_000}],
+            "bankruptcy_history": [{"case": "Ch7"}],
+        }
+        result = score_lien_certificate(_parcel, lien, owner, entity_data=entity)
+        assert result.owner_motivation <= 10
+
+
+# ── Financial health scoring tests (tax deed) ────────────────────────────────
+
+
+class TestTaxDeedFinancialHealth:
+    """Tests for entity financial health signals in tax deed scoring."""
+
+    @pytest.fixture
+    def _parcel(self):
+        return {
+            "parcel_id": "FH-002",
+            "property_type": "residential",
+            "assessed_total": 200_000,
+            "market_value_est": 250_000,
+            "year_built": 2005,
+        }
+
+    @pytest.fixture
+    def _lien(self):
+        return {
+            "instrument_type": "tax_deed",
+            "opening_bid": 85_000,
+            "title_risk_level": "minor",
+            "auction_platform": "bid4assets",
+        }
+
+    @pytest.fixture
+    def _owner(self):
+        return {
+            "owner_type": "llc",
+            "is_absentee": False,
+            "mailing_address": "456 Oak Ave",
+            "best_phone": None,
+            "best_email": None,
+        }
+
+    def test_ucc_filings_boost_motivation(self, _parcel, _lien, _owner):
+        entity = {"ucc_filings": [{"debtor": "Acme LLC"}]}
+        result = score_tax_deed(_parcel, _lien, _owner, entity_data=entity)
+        assert result.owner_motivation >= 2
+        assert "entity_ucc_filings" in result.risk_flags
+
+    def test_tax_liens_boost_motivation_and_flag(self, _parcel, _lien, _owner):
+        entity = {
+            "federal_tax_liens": [{"amount": 20_000}],
+            "state_tax_liens": [{"amount": 5_000}],
+        }
+        result = score_tax_deed(_parcel, _lien, _owner, entity_data=entity)
+        assert result.owner_motivation >= 3
+        assert "entity_tax_liens" in result.risk_flags
+        assert result.flags_detail["entity_tax_lien_total"] == 25_000.0
+
+    def test_bankruptcy_adds_flag(self, _parcel, _lien, _owner):
+        entity = {"bankruptcy_history": [{"case": "Ch7", "year": 2023}]}
+        result = score_tax_deed(_parcel, _lien, _owner, entity_data=entity)
+        assert "entity_bankruptcy" in result.risk_flags
+
+    def test_litigation_summary_adds_flag(self, _parcel, _lien, _owner):
+        entity = {"litigation_summary": "Foreclosure action pending"}
+        result = score_tax_deed(_parcel, _lien, _owner, entity_data=entity)
+        assert "entity_active_litigation" in result.risk_flags
+
+    def test_none_entity_data_backward_compatible(self, _parcel, _lien, _owner):
+        result_none = score_tax_deed(_parcel, _lien, _owner, entity_data=None)
+        result_default = score_tax_deed(_parcel, _lien, _owner)
+        assert result_none.overall_score == result_default.overall_score
+        assert result_none.owner_motivation == result_default.owner_motivation
+        assert result_none.risk_flags == result_default.risk_flags
+
+    def test_no_entity_motivation_is_zero(self, _parcel, _lien, _owner):
+        """Without entity data, tax deed owner_motivation should be 0."""
+        result = score_tax_deed(_parcel, _lien, _owner, entity_data=None)
+        assert result.owner_motivation == 0
+
+    def test_all_financial_signals_combined(self, _parcel, _lien, _owner):
+        entity = {
+            "ucc_filings": [{"debtor": "X"}],
+            "federal_tax_liens": [{"amount": 10_000}],
+            "state_tax_liens": [{"amount": 5_000}],
+            "bankruptcy_history": [{"case": "Ch11"}],
+            "litigation_summary": "Active breach-of-contract suit",
+        }
+        result = score_tax_deed(_parcel, _lien, _owner, entity_data=entity)
+        assert "entity_ucc_filings" in result.risk_flags
+        assert "entity_tax_liens" in result.risk_flags
+        assert "entity_bankruptcy" in result.risk_flags
+        assert "entity_active_litigation" in result.risk_flags
+        assert "Financial health:" in result.score_rationale
+        # All boosts: 2+3+2 = 7, capped at 10
+        assert result.owner_motivation == 7
+
+    def test_motivation_capped_at_10(self, _parcel, _lien, _owner):
+        entity = {
+            "ucc_filings": [{"x": 1}] * 5,
+            "federal_tax_liens": [{"amount": 100_000}],
+            "state_tax_liens": [{"amount": 50_000}],
+            "bankruptcy_history": [{"case": "Ch7"}, {"case": "Ch13"}],
+        }
+        result = score_tax_deed(_parcel, _lien, _owner, entity_data=entity)
+        assert result.owner_motivation <= 10
+
+
 # ── Owner type classifier tests ───────────────────────────────────────────────
 
 class TestOwnerTypeClassifier:

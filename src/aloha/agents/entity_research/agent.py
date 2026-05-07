@@ -8,9 +8,10 @@ Responsibilities:
 5. Search UCC filings for liens against the entity (financial health signal)
 6. Search federal court records for litigation and bankruptcy (CourtListener)
 7. Search state lien records for federal and state tax liens
-8. Derive the best beneficial owner name for outreach
-9. Persist the Entity record (including UCC + litigation data) and link it to the Owner
-10. Enqueue for the Scoring Agent
+8. Enrich business contact info (website, phone, email) via People Data Labs
+9. Derive the best beneficial owner name for outreach
+10. Persist the Entity record (including UCC, litigation, and contact data) and link to Owner
+11. Enqueue for the Scoring Agent
 """
 
 from __future__ import annotations
@@ -128,7 +129,12 @@ class EntityResearchAgent(BaseAgent):
         # ── Step 5: Court records / litigation ────────────────────────────
         litigation_data = await self._search_litigation(entity_name, state)
 
-        # ── Step 6: Persist Entity record ─────────────────────────────────
+        # ── Step 6: Business contact enrichment ───────────────────────────
+        contact_data = await self._enrich_entity_contacts(
+            sos_result, entity_name, state,
+        )
+
+        # ── Step 7: Persist Entity record ─────────────────────────────────
         entity_id = await self._persist(
             parcel_id=parcel_id,
             owner_id=owner_id,
@@ -139,6 +145,7 @@ class EntityResearchAgent(BaseAgent):
             related_entity_ids=related_entity_ids,
             ucc_filings=ucc_filings,
             litigation_data=litigation_data,
+            contact_data=contact_data,
             state=state,
             county=county,
         )
@@ -451,6 +458,159 @@ class EntityResearchAgent(BaseAgent):
 
         return "\n".join(parts)
 
+    # ── Contact enrichment ─────────────────────────────────────────────────
+
+    async def _enrich_entity_contacts(
+        self,
+        sos_result: dict[str, Any],
+        entity_name: str,
+        state: str,
+    ) -> dict[str, Any]:
+        """Enrich business contact info via People Data Labs / Hunter.io.
+
+        Strategy:
+        1. Extract a beneficial owner name from sos_result officers/managers
+           (skip commercial registered agents).
+        2. Call enrich_person(name, company=entity_name) on the People Data server.
+        3. Extract phone, email, and company website from the result.
+        4. If no email found but a website domain is known, try verify_email()
+           with a guessed first.last@domain pattern.
+
+        Returns a dict with keys ``website``, ``phone``, ``email`` (all nullable).
+        On any failure returns an empty dict so the pipeline is never blocked.
+        """
+        empty: dict[str, Any] = {"website": None, "phone": None, "email": None}
+
+        # Find the best person name to enrich
+        person_name = self._pick_enrichable_person(sos_result)
+        if not person_name:
+            self.log.info(
+                "contact_enrichment_skipped",
+                reason="no_beneficial_owner_name",
+                entity_name=entity_name,
+            )
+            return empty
+
+        try:
+            from aloha.mcp_servers.people_data.server import (
+                create_people_data_server,
+            )
+
+            server = create_people_data_server()
+        except (ValueError, ImportError) as exc:
+            self.log.warning("people_data_server_unavailable", error=str(exc))
+            return empty
+
+        try:
+            # ── Enrich person via PDL ────────────────────────────────
+            pdl_result = await server.enrich_person(
+                name=person_name, company=entity_name,
+            )
+            if pdl_result.get("error"):
+                self.log.warning(
+                    "pdl_enrich_error",
+                    person=person_name,
+                    error=pdl_result["error"],
+                )
+                return empty
+
+            # Extract contact fields
+            phone_numbers = pdl_result.get("phone_numbers") or []
+            emails = pdl_result.get("emails") or []
+            company_name = pdl_result.get("company")
+
+            phone = phone_numbers[0] if phone_numbers else None
+            email = emails[0] if emails else None
+            website = self._derive_website(company_name, emails)
+
+            # ── Fallback: guess email via Hunter.io ──────────────────
+            if not email and website:
+                guessed = self._guess_email(person_name, website)
+                if guessed:
+                    verify_result = await server.verify_email(guessed)
+                    status = verify_result.get("status", "")
+                    if status in ("valid", "accept_all"):
+                        email = guessed
+                        self.log.info(
+                            "email_guessed_and_verified",
+                            email=guessed,
+                            status=status,
+                        )
+
+            self.log.info(
+                "contact_enrichment_complete",
+                entity_name=entity_name,
+                person=person_name,
+                has_phone=phone is not None,
+                has_email=email is not None,
+                has_website=website is not None,
+            )
+            return {"website": website, "phone": phone, "email": email}
+        except Exception as exc:
+            self.log.warning(
+                "contact_enrichment_failed",
+                entity_name=entity_name,
+                error=str(exc),
+            )
+            return empty
+        finally:
+            await server.close()
+
+    @staticmethod
+    def _pick_enrichable_person(sos_result: dict[str, Any]) -> str | None:
+        """Return the first non-commercial-RA person name from SOS data."""
+        if not sos_result:
+            return None
+        for group_key in ("officers", "managers_members"):
+            people = sos_result.get(group_key, [])
+            for person in people:
+                name = person.get("name", "")
+                if name and not _is_commercial_ra(name):
+                    return name.strip()
+        # Fall back to registered agent if not commercial
+        ra = sos_result.get("registered_agent")
+        if ra and not _is_commercial_ra(ra):
+            return ra.strip()
+        return None
+
+    @staticmethod
+    def _derive_website(
+        company_name: str | None,
+        emails: list[str],
+    ) -> str | None:
+        """Derive a website URL from email domains or company name."""
+        # Try to extract domain from email addresses
+        for email in emails:
+            if "@" in email:
+                domain = email.split("@", 1)[1].lower()
+                # Skip common webmail providers
+                if domain not in {
+                    "gmail.com", "yahoo.com", "hotmail.com", "outlook.com",
+                    "aol.com", "icloud.com", "protonmail.com", "mail.com",
+                }:
+                    return f"https://{domain}"
+        return None
+
+    @staticmethod
+    def _guess_email(person_name: str, website: str) -> str | None:
+        """Guess a business email from a person name and website domain.
+
+        Uses first.last@domain pattern. Returns None if name cannot be split.
+        """
+        # Extract domain from website URL
+        domain = website.replace("https://", "").replace("http://", "").strip("/")
+        parts = person_name.strip().split()
+        if len(parts) < 2:
+            return None
+        first = parts[0].lower()
+        last = parts[-1].lower()
+        # Strip non-alpha chars (suffixes like Jr., III, etc.)
+        first = "".join(c for c in first if c.isalpha())
+        last = "".join(c for c in last if c.isalpha())
+        if not first or not last:
+            return None
+        return f"{first}.{last}@{domain}"
+
     # ── Persistence ───────────────────────────────────────────────────────
 
     async def _persist(
@@ -465,6 +625,7 @@ class EntityResearchAgent(BaseAgent):
         related_entity_ids: list[str],
         ucc_filings: list[dict[str, Any]] | None = None,
         litigation_data: dict[str, Any] | None = None,
+        contact_data: dict[str, Any] | None = None,
         state: str,
         county: str,
     ) -> int | None:
@@ -485,6 +646,7 @@ class EntityResearchAgent(BaseAgent):
 
             # Upsert Entity
             lit = litigation_data or {}
+            contacts = contact_data or {}
             entity = Entity(
                 entity_name=entity_name,
                 entity_type=sos_result.get("entity_type"),
@@ -503,7 +665,12 @@ class EntityResearchAgent(BaseAgent):
                 bankruptcy_history=lit.get("bankruptcy_history") or None,
                 litigation_summary=lit.get("litigation_summary") or None,
                 pacer_results=lit.get("pacer_results") or None,
-                content_hash=hashlib.md5(str(sorted(sos_result.items())).encode()).hexdigest(),
+                website=contacts.get("website"),
+                phone=contacts.get("phone"),
+                email=contacts.get("email"),
+                content_hash=hashlib.md5(
+                    str(sorted(sos_result.items())).encode()
+                ).hexdigest(),
                 last_researched_at=now,
                 created_at=now,
             )

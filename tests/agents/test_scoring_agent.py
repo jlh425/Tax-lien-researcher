@@ -104,6 +104,7 @@ class TestScoringAgent:
             },
             {"owner_type": "individual", "is_absentee": True,
              "best_phone": "+15551234567", "best_email": "john@example.com"},
+            None,  # no entity
         ))
         agent._persist = AsyncMock(return_value=1)
 
@@ -121,6 +122,7 @@ class TestScoringAgent:
             {"instrument_type": "tax_deed", "lien_status": "active",
              "total_owed": 15000, "opening_bid": 20000, "auction_date": "2025-06-15"},
             {"owner_type": "individual", "is_absentee": False},
+            None,  # no entity
         ))
         agent._persist = AsyncMock(return_value=2)
 
@@ -131,7 +133,9 @@ class TestScoringAgent:
 
     @pytest.mark.asyncio
     async def test_no_lien_skipped(self, agent, base_context):
-        agent._load_data = AsyncMock(return_value=({"parcel_id": "TEST-001"}, {}, {}))
+        agent._load_data = AsyncMock(
+            return_value=({"parcel_id": "TEST-001"}, {}, {}, None),
+        )
 
         result = await agent.run(base_context)
 
@@ -144,6 +148,7 @@ class TestScoringAgent:
             {"parcel_id": "TEST-001", "assessed_total": 100000},
             {"instrument_type": "lien_certificate", "total_owed": 2000, "tax_year": 2023},
             {},
+            None,  # no entity
         ))
         agent._persist = AsyncMock(return_value=3)
 
@@ -151,3 +156,52 @@ class TestScoringAgent:
 
         assert result["status"] == "complete"
         agent._persist.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_entity_data_passed_to_lien_cert_model(self, agent, base_context):
+        """When _load_data returns entity data, it flows to the lien cert model."""
+        entity_dict = {
+            "ucc_filings": [{"debtor": "Test LLC"}],
+            "federal_tax_liens": [{"amount": 10_000}],
+        }
+        agent._load_data = AsyncMock(return_value=(
+            {"parcel_id": "TEST-001", "assessed_total": 200000},
+            {
+                "instrument_type": "lien_certificate", "total_owed": 4000,
+                "principal_amount": 3500, "certificate_interest_rate": 0.18,
+            },
+            {"owner_type": "llc", "is_absentee": False,
+             "mailing_address": "123 St", "best_phone": None, "best_email": None},
+            entity_dict,
+        ))
+        agent._persist = AsyncMock(return_value=10)
+
+        result = await agent.run(base_context)
+
+        assert result["status"] == "complete"
+        assert "entity_ucc_filings" in result["risk_flags"]
+        assert "entity_tax_liens" in result["risk_flags"]
+
+    @pytest.mark.asyncio
+    async def test_entity_data_passed_to_tax_deed_model(self, agent, base_context):
+        """When _load_data returns entity data, it flows to the tax deed model."""
+        base_context["state"] = "TX"
+        entity_dict = {
+            "bankruptcy_history": [{"case": "Ch7"}],
+            "litigation_summary": "Pending foreclosure",
+        }
+        agent._load_data = AsyncMock(return_value=(
+            {"parcel_id": "TEST-001", "assessed_total": 200000,
+             "market_value_est": 250000, "property_type": "residential"},
+            {"instrument_type": "tax_deed", "opening_bid": 50000,
+             "title_risk_level": "clear"},
+            {"owner_type": "llc", "is_absentee": False},
+            entity_dict,
+        ))
+        agent._persist = AsyncMock(return_value=11)
+
+        result = await agent.run(base_context)
+
+        assert result["status"] == "complete"
+        assert "entity_bankruptcy" in result["risk_flags"]
+        assert "entity_active_litigation" in result["risk_flags"]

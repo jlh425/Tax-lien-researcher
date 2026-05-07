@@ -15,13 +15,20 @@ from datetime import datetime, timezone
 from typing import Any
 
 import structlog
+from sqlalchemy import select
 
 from aloha.agents.base import BaseAgent
 from aloha.agents.scoring.models import ScoringResult, score_lien_certificate, score_tax_deed
 from aloha.agents.discovery.state_registry import get_state_info
 from aloha.db.engine import async_session_factory
+from aloha.db.models.owner import OwnerEntity
 from aloha.db.models.score import Score
-from aloha.db.repositories import ParcelRepository, QueueRepository, TaxLienRepository
+from aloha.db.repositories import (
+    EntityRepository,
+    ParcelRepository,
+    QueueRepository,
+    TaxLienRepository,
+)
 from aloha.db.repositories.owner import OwnerRepository
 
 log = structlog.get_logger().bind(agent="scoring")
@@ -50,7 +57,9 @@ class ScoringAgent(BaseAgent):
         self.log.info("scoring_started", parcel_id=parcel_id, state=state)
 
         # ── Load data ─────────────────────────────────────────────────────
-        parcel_dict, lien_dict, owner_dict = await self._load_data(parcel_id)
+        parcel_dict, lien_dict, owner_dict, entity_dict = await self._load_data(
+            parcel_id,
+        )
 
         if not lien_dict:
             self.log.warning("no_lien_found", parcel_id=parcel_id)
@@ -62,10 +71,16 @@ class ScoringAgent(BaseAgent):
 
         if instrument_type == "tax_deed":
             post_sale_days = state_info.post_sale_redemption_days if state_info else 0
-            result = score_tax_deed(parcel_dict, lien_dict, owner_dict, post_sale_days)
+            result = score_tax_deed(
+                parcel_dict, lien_dict, owner_dict, post_sale_days,
+                entity_data=entity_dict,
+            )
         else:
             cert_cap = state_info.cert_rate_cap if state_info else None
-            result = score_lien_certificate(parcel_dict, lien_dict, owner_dict, cert_cap)
+            result = score_lien_certificate(
+                parcel_dict, lien_dict, owner_dict, cert_cap,
+                entity_data=entity_dict,
+            )
 
         # ── Persist ───────────────────────────────────────────────────────
         score_id = await self._persist(parcel_id, result, state, county)
@@ -90,12 +105,17 @@ class ScoringAgent(BaseAgent):
 
     async def _load_data(
         self, parcel_id: str
-    ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-        """Load parcel, most recent lien, and primary owner as plain dicts."""
+    ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any] | None]:
+        """Load parcel, most recent lien, primary owner, and linked entity.
+
+        Returns:
+            (parcel_dict, lien_dict, owner_dict, entity_dict_or_None)
+        """
         async with async_session_factory() as session:
             parcel_repo = ParcelRepository(session)
             lien_repo = TaxLienRepository(session)
             owner_repo = OwnerRepository(session)
+            entity_repo = EntityRepository(session)
 
             parcel = await parcel_repo.get(parcel_id)
             parcel_dict = _model_to_dict(parcel) if parcel else {}
@@ -109,7 +129,20 @@ class ScoringAgent(BaseAgent):
             owner = owners[0] if owners else None
             owner_dict = _model_to_dict(owner) if owner else {}
 
-        return parcel_dict, lien_dict, owner_dict
+            # Load linked entity via OwnerEntity join table
+            entity_dict: dict[str, Any] | None = None
+            if owner and owner.id:
+                stmt = (
+                    select(OwnerEntity.entity_id)
+                    .where(OwnerEntity.owner_id == owner.id)
+                    .limit(1)
+                )
+                row = (await session.execute(stmt)).scalar_one_or_none()
+                if row:
+                    entity = await entity_repo.get(row)
+                    entity_dict = _model_to_dict(entity) if entity else None
+
+        return parcel_dict, lien_dict, owner_dict, entity_dict
 
     # ── Persistence ───────────────────────────────────────────────────────
 
