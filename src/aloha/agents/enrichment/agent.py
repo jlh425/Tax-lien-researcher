@@ -67,15 +67,41 @@ class EnrichmentAgent(BaseAgent):
 
         # Skip re-enrichment if already done
         if parcel.research_status in ("enriched", "scoring", "scored", "complete"):
-            self.log.info("enrichment_already_done", parcel_id=parcel_id, status=parcel.research_status)
+            self.log.info(
+                "enrichment_already_done",
+                parcel_id=parcel_id,
+                status=parcel.research_status,
+            )
             return {"status": "skipped", "reason": "already_enriched"}
+
+        # ── Step 1b: Geocode if missing coordinates ───────────────────────
+        if not (parcel.latitude and parcel.longitude) and parcel.address:
+            coords = await self._geocode_address(parcel.address)
+            if coords:
+                parcel.latitude = coords["latitude"]
+                parcel.longitude = coords["longitude"]
+                async with async_session_factory() as session:
+                    parcel_repo = ParcelRepository(session)
+                    p = await parcel_repo.get(parcel_id)
+                    if p:
+                        p.latitude = coords["latitude"]
+                        p.longitude = coords["longitude"]
+                    await session.commit()
+                self.log.info(
+                    "geocoded_parcel",
+                    parcel_id=parcel_id,
+                    lat=coords["latitude"],
+                    lng=coords["longitude"],
+                )
 
         # ── Step 2: Trigger image capture ─────────────────────────────────
         # Deferred import to avoid circular dependency (server.py imports aloha.db)
         from aloha.mcp_servers.image_capture.server import ImageCaptureMCPServer
         from aloha.config import settings
 
-        image_server = ImageCaptureMCPServer(google_api_key=settings.google_maps_api_key)
+        image_server = ImageCaptureMCPServer(
+            google_api_key=settings.google_maps_api_key,
+        )
         try:
             if parcel.latitude and parcel.longitude:
                 await image_server.capture_satellite(
@@ -89,7 +115,11 @@ class EnrichmentAgent(BaseAgent):
                     address=parcel.address,
                 )
         except Exception as exc:
-            self.log.warning("image_capture_failed", parcel_id=parcel_id, error=str(exc))
+            self.log.warning(
+                "image_capture_failed",
+                parcel_id=parcel_id,
+                error=str(exc),
+            )
         finally:
             await image_server.close()
 
@@ -222,6 +252,38 @@ class EnrichmentAgent(BaseAgent):
             [task, BinaryContent(data=image_bytes, media_type=mime_type)]
         )
         return result.output
+
+    async def _geocode_address(
+        self, address: str
+    ) -> dict[str, float] | None:
+        """Geocode an address via the GIS MCP server.
+
+        Returns ``{"latitude": ..., "longitude": ...}`` on success, or
+        ``None`` if geocoding is unavailable or fails.
+        """
+        try:
+            from aloha.mcp_servers.gis.server import create_gis_server
+
+            server = create_gis_server()
+        except (ValueError, ImportError) as exc:
+            self.log.info("gis_server_unavailable", error=str(exc))
+            return None
+
+        try:
+            result = await server.geocode_address(address)
+            results = result.get("results", [])
+            if results:
+                top = results[0]
+                lat = top.get("latitude")
+                lng = top.get("longitude")
+                if lat is not None and lng is not None:
+                    return {"latitude": lat, "longitude": lng}
+            return None
+        except Exception as exc:
+            self.log.warning("geocode_failed", address=address, error=str(exc))
+            return None
+        finally:
+            await server.close()
 
 
 # ── Module-level singleton ─────────────────────────────────────────────────────

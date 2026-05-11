@@ -1,11 +1,10 @@
-import { useState } from "react";
-
-interface ScoringWeights {
-  lien_to_value: number;
-  redemption_urgency: number;
-  owner_motivation: number;
-  contact_reachability: number;
-}
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type ScoringWeights,
+  getPreferences,
+  updatePreferences,
+} from "../api/settings";
 
 const DEFAULT_WEIGHTS: ScoringWeights = {
   lien_to_value: 25,
@@ -15,10 +14,42 @@ const DEFAULT_WEIGHTS: ScoringWeights = {
 };
 
 export function AlohaSettings() {
+  const queryClient = useQueryClient();
+
   const [mapsApiKey, setMapsApiKey] = useState("");
   const [weights, setWeights] = useState<ScoringWeights>(DEFAULT_WEIGHTS);
   const [includeScreenshots, setIncludeScreenshots] = useState(true);
-  const [saved, setSaved] = useState(false);
+
+  const {
+    data: preferences,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["user-preferences"],
+    queryFn: getPreferences,
+  });
+
+  // Populate form from fetched data
+  useEffect(() => {
+    if (preferences) {
+      setWeights(preferences.scoring_weights);
+      setIncludeScreenshots(preferences.include_screenshots);
+      setMapsApiKey(preferences.api_keys.google_maps ?? "");
+    }
+  }, [preferences]);
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      updatePreferences({
+        scoring_weights: weights,
+        api_keys: { google_maps: mapsApiKey || null },
+        include_screenshots: includeScreenshots,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-preferences"] });
+    },
+  });
 
   function handleWeightChange(key: keyof ScoringWeights, value: string) {
     const num = parseInt(value) || 0;
@@ -26,12 +57,32 @@ export function AlohaSettings() {
   }
 
   function handleSave() {
-    // TODO: Persist to backend when API endpoint is available
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    saveMutation.mutate();
   }
 
   const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-2xl mx-auto px-6 py-6">
+          <p className="text-gray-400 text-sm">Loading preferences...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-2xl mx-auto px-6 py-6">
+          <p className="text-red-500 text-sm">
+            Failed to load preferences: {error instanceof Error ? error.message : "Unknown error"}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -106,12 +157,18 @@ export function AlohaSettings() {
         <div className="pt-4 border-t border-gray-200">
           <button
             onClick={handleSave}
-            className="bg-blue-600 text-white text-sm font-medium px-6 py-2 rounded hover:bg-blue-700 transition"
+            disabled={saveMutation.isPending}
+            className="bg-blue-600 text-white text-sm font-medium px-6 py-2 rounded hover:bg-blue-700 transition disabled:opacity-50"
           >
-            Save Settings
+            {saveMutation.isPending ? "Saving..." : "Save Settings"}
           </button>
-          {saved && (
+          {saveMutation.isSuccess && (
             <span className="ml-3 text-sm text-green-600">Settings saved</span>
+          )}
+          {saveMutation.isError && (
+            <span className="ml-3 text-sm text-red-500">
+              Failed to save: {saveMutation.error instanceof Error ? saveMutation.error.message : "Unknown error"}
+            </span>
           )}
         </div>
       </div>

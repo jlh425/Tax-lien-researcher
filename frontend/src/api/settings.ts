@@ -140,3 +140,40 @@ export async function deleteConfiguredLlm(llmId: string): Promise<MessageRespons
   });
   return data;
 }
+
+// ── User Preferences (scoring weights / external API keys) ───────────────────
+
+export interface ScoringWeights {
+  lien_to_value: number;
+  redemption_urgency: number;
+  owner_motivation: number;
+  contact_reachability: number;
+}
+
+export interface UserApiKeys {
+  google_maps: string | null;
+}
+
+export interface UserPreferencesResponse {
+  scoring_weights: ScoringWeights;
+  api_keys: UserApiKeys;
+  include_screenshots: boolean;
+}
+
+export interface UserPreferencesRequest {
+  scoring_weights?: ScoringWeights | null;
+  api_keys?: UserApiKeys | null;
+  include_screenshots?: boolean | null;
+}
+
+export async function getPreferences(): Promise<UserPreferencesResponse> {
+  const { data } = await client.get<UserPreferencesResponse>("/settings/preferences");
+  return data;
+}
+
+export async function updatePreferences(
+  body: UserPreferencesRequest,
+): Promise<UserPreferencesResponse> {
+  const { data } = await client.put<UserPreferencesResponse>("/settings/preferences", body);
+  return data;
+}

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from aloha.agents.parcel_research.tools import (
     classify_property_type,
     parse_legal_description,
+    query_assessor_web,
 )
 
 
@@ -173,3 +174,94 @@ class TestParcelResearchAgent:
         result = await agent.run(base_context)
 
         assert result["status"] == "failed"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# query_assessor_web — County Assessor MCP server integration
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestQueryAssessorWeb:
+    """Tests for query_assessor_web which delegates to CountyAssessorMCPServer."""
+
+    _PATCH_TARGET = (
+        "aloha.mcp_servers.county_assessor.server.create_county_assessor_server"
+    )
+
+    @pytest.mark.asyncio
+    async def test_lookup_parcel_success(self) -> None:
+        """Successful lookup via CountyAssessorMCPServer.lookup_parcel."""
+        mock_server = MagicMock()
+        mock_server.lookup_parcel = AsyncMock(
+            return_value={"parcel_id": "123", "address": "456 Main St"},
+        )
+
+        with patch(self._PATCH_TARGET, return_value=mock_server):
+            result = await query_assessor_web("123", "FL", "orange")
+
+        assert result["parcel_id"] == "123"
+        assert result["address"] == "456 Main St"
+        mock_server.lookup_parcel.assert_awaited_once_with(
+            "123", "FL", "orange",
+        )
+
+    @pytest.mark.asyncio
+    async def test_lookup_fails_address_fallback_succeeds(self) -> None:
+        """When lookup_parcel returns error and address is given, tries
+        search_by_address and returns first result."""
+        mock_server = MagicMock()
+        mock_server.lookup_parcel = AsyncMock(
+            return_value={"error": "not found"},
+        )
+        mock_server.search_by_address = AsyncMock(
+            return_value={
+                "parcels": [{"parcel_id": "123", "address": "456 Main St"}],
+            },
+        )
+
+        with patch(self._PATCH_TARGET, return_value=mock_server):
+            result = await query_assessor_web(
+                "123", "FL", "orange", address="456 Main St",
+            )
+
+        assert result["parcel_id"] == "123"
+        mock_server.search_by_address.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_lookup_fails_no_address_returns_error(self) -> None:
+        """When lookup_parcel fails and no address provided, returns the
+        error dict from lookup_parcel."""
+        mock_server = MagicMock()
+        mock_server.lookup_parcel = AsyncMock(
+            return_value={"error": "No scraper available for ZZ/nowhere"},
+        )
+
+        with patch(self._PATCH_TARGET, return_value=mock_server):
+            result = await query_assessor_web("999", "ZZ", "nowhere")
+
+        assert "error" in result
+
+    @pytest.mark.asyncio
+    async def test_server_import_error_returns_error(self) -> None:
+        """When create_county_assessor_server cannot be imported, returns
+        graceful error dict."""
+        with patch(self._PATCH_TARGET, side_effect=ImportError("not installed")):
+            result = await query_assessor_web("123", "FL", "orange")
+
+        assert "error" in result
+        assert result["parcel_id"] == "123"
+
+    @pytest.mark.asyncio
+    async def test_server_exception_returns_error(self) -> None:
+        """When the MCP server raises an unexpected error, returns graceful
+        error dict."""
+        mock_server = MagicMock()
+        mock_server.lookup_parcel = AsyncMock(
+            side_effect=RuntimeError("network down"),
+        )
+
+        with patch(self._PATCH_TARGET, return_value=mock_server):
+            result = await query_assessor_web("123", "FL", "orange")
+
+        assert "error" in result
+        assert "network down" in result["error"]

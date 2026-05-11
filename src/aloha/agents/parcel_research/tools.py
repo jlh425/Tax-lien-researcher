@@ -92,9 +92,9 @@ async def query_assessor_web(
 ) -> dict[str, Any]:
     """Scrape the county assessor website for parcel data.
 
-    Falls back to this when no ArcGIS endpoint exists.  This is a stub that
-    returns a placeholder; the actual Playwright implementation lives in
-    Tier 2/3 scrapers and will be wired in when those are built.
+    Falls back to this when no ArcGIS endpoint exists. Delegates to the
+    County Assessor MCP server which cascades through qPublic and Tyler
+    EagleWeb Playwright scrapers.
 
     Args:
         parcel_id: The assessor parcel number.
@@ -103,22 +103,63 @@ async def query_assessor_web(
         address: Property address (optional, used for fallback search).
 
     Returns:
-        Partial parcel dict from assessor website, or ``{"error": "..."}`` if unavailable.
+        Partial parcel dict from assessor website, or ``{"error": "..."}``
+        if unavailable.
     """
-    log.info(
-        "assessor_web_stub",
-        parcel_id=parcel_id,
-        state=state,
-        county=county,
-        note="Tier 2 Playwright scraper not yet wired in",
-    )
-    # Will be replaced by dynamic Playwright scraper dispatch once Tier 2 is built.
-    return {
-        "error": "assessor_web scraper not yet implemented for this county",
-        "parcel_id": parcel_id,
-        "state": state,
-        "county": county,
-    }
+    try:
+        from aloha.mcp_servers.county_assessor.server import (
+            create_county_assessor_server,
+        )
+
+        server = create_county_assessor_server()
+    except (ValueError, ImportError) as exc:
+        log.warning("county_assessor_server_unavailable", error=str(exc))
+        return {
+            "error": f"county assessor server unavailable: {exc}",
+            "parcel_id": parcel_id,
+            "state": state,
+            "county": county,
+        }
+
+    try:
+        result = await server.lookup_parcel(parcel_id, state, county)
+        if "error" not in result:
+            log.info(
+                "assessor_web_found",
+                parcel_id=parcel_id,
+                state=state,
+                county=county,
+            )
+            return result
+
+        # If lookup_parcel failed and we have an address, try address search
+        if address:
+            addr_result = await server.search_by_address(
+                address, state, county,
+            )
+            parcels = addr_result.get("parcels", [])
+            if parcels:
+                log.info(
+                    "assessor_web_found_via_address",
+                    parcel_id=parcel_id,
+                    address=address,
+                    count=len(parcels),
+                )
+                return parcels[0]
+
+        return result
+    except Exception as exc:
+        log.warning(
+            "assessor_web_failed",
+            parcel_id=parcel_id,
+            error=str(exc),
+        )
+        return {
+            "error": str(exc),
+            "parcel_id": parcel_id,
+            "state": state,
+            "county": county,
+        }
 
 
 def parse_legal_description(legal_description: str) -> dict[str, Any]:

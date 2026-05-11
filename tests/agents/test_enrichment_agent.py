@@ -363,3 +363,84 @@ class TestEnrichmentAgentRun:
                             result = await agent.run(base_context)
 
         assert result["status"] == "no_images"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# _geocode_address — GIS MCP server integration
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestGeocodeAddress:
+    """Test the EnrichmentAgent._geocode_address method (GIS MCP integration)."""
+
+    @pytest.fixture
+    def agent(self):
+        from aloha.agents.enrichment.agent import EnrichmentAgent
+        return EnrichmentAgent()
+
+    @pytest.mark.asyncio
+    async def test_geocode_success(self, agent) -> None:
+        mock_server = MagicMock()
+        mock_server.geocode_address = AsyncMock(return_value={
+            "results": [{
+                "latitude": 28.54,
+                "longitude": -81.38,
+                "formatted_address": "123 Main St, Orlando, FL",
+            }],
+        })
+        mock_server.close = AsyncMock()
+
+        with patch(
+            "aloha.mcp_servers.gis.server.create_gis_server",
+            return_value=mock_server,
+        ):
+            coords = await agent._geocode_address("123 Main St, Orlando, FL")
+
+        assert coords is not None
+        assert coords["latitude"] == 28.54
+        assert coords["longitude"] == -81.38
+        mock_server.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_geocode_no_results(self, agent) -> None:
+        mock_server = MagicMock()
+        mock_server.geocode_address = AsyncMock(return_value={
+            "results": [],
+        })
+        mock_server.close = AsyncMock()
+
+        with patch(
+            "aloha.mcp_servers.gis.server.create_gis_server",
+            return_value=mock_server,
+        ):
+            coords = await agent._geocode_address("nonexistent address")
+
+        assert coords is None
+        mock_server.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_geocode_server_unavailable(self, agent) -> None:
+        with patch(
+            "aloha.mcp_servers.gis.server.create_gis_server",
+            side_effect=ValueError("GOOGLE_MAPS_API_KEY is required"),
+        ):
+            coords = await agent._geocode_address("123 Main St")
+
+        assert coords is None
+
+    @pytest.mark.asyncio
+    async def test_geocode_exception(self, agent) -> None:
+        mock_server = MagicMock()
+        mock_server.geocode_address = AsyncMock(
+            side_effect=RuntimeError("network error"),
+        )
+        mock_server.close = AsyncMock()
+
+        with patch(
+            "aloha.mcp_servers.gis.server.create_gis_server",
+            return_value=mock_server,
+        ):
+            coords = await agent._geocode_address("123 Main St")
+
+        assert coords is None
+        mock_server.close.assert_awaited_once()
