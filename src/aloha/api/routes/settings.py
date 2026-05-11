@@ -20,10 +20,15 @@ from aloha.api.schemas.settings import (
     LlmStatusResponse,
     MessageResponse,
     SaveApiKeyRequest,
+    ScoringWeightsSchema,
     SetActiveLlmRequest,
     TestLlmRequest,
     TestLlmResponse,
+    UserApiKeysSchema,
+    UserPreferencesRequest,
+    UserPreferencesResponse,
 )
+from aloha.db.repositories.user_preferences import UserPreferencesRepository
 from aloha.services.api_key_service import ApiKeyService
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -31,6 +36,12 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 
 def _api_key_service(db: AsyncSession = Depends(get_db)) -> ApiKeyService:
     return ApiKeyService(db)
+
+
+def _preferences_repo(
+    db: AsyncSession = Depends(get_db),
+) -> UserPreferencesRepository:
+    return UserPreferencesRepository(db)
 
 
 @router.get("/api-keys", response_model=ApiKeysResponse)
@@ -209,3 +220,74 @@ async def delete_configured_llm(
     """Remove a configured LLM. Auto-promotes next if active was deleted."""
     await svc.delete_configured_llm(user.id, body.llm_id)
     return MessageResponse(message="Configured LLM removed")
+
+
+# ── User Preferences (scoring weights / external API keys) ───────────────────
+
+_DEFAULT_WEIGHTS = ScoringWeightsSchema()
+_DEFAULT_API_KEYS = UserApiKeysSchema()
+
+
+@router.get("/preferences", response_model=UserPreferencesResponse)
+async def get_preferences(
+    user: Any = Depends(require_user),
+    repo: UserPreferencesRepository = Depends(_preferences_repo),
+) -> UserPreferencesResponse:
+    """Return the current user's scoring weights and API keys."""
+    prefs = await repo.get_by_user_id(user.id)
+    if prefs is None:
+        return UserPreferencesResponse(
+            scoring_weights=_DEFAULT_WEIGHTS,
+            api_keys=_DEFAULT_API_KEYS,
+            include_screenshots=True,
+        )
+    return UserPreferencesResponse(
+        scoring_weights=ScoringWeightsSchema(**prefs.scoring_weights),
+        api_keys=UserApiKeysSchema(**prefs.api_keys),
+        include_screenshots=prefs.scoring_weights.get(
+            "include_screenshots", True
+        ),
+    )
+
+
+@router.put("/preferences", response_model=UserPreferencesResponse)
+async def update_preferences(
+    body: UserPreferencesRequest,
+    user: Any = Depends(require_user),
+    repo: UserPreferencesRepository = Depends(_preferences_repo),
+) -> UserPreferencesResponse:
+    """Create or update scoring weights and/or API keys for the current user."""
+    scoring_weights: dict | None = None
+    if body.scoring_weights is not None:
+        scoring_weights = body.scoring_weights.model_dump()
+    # Persist include_screenshots inside the scoring_weights blob
+    if body.include_screenshots is not None:
+        if scoring_weights is None:
+            # Load existing weights so we don't clobber them
+            existing = await repo.get_by_user_id(user.id)
+            scoring_weights = (
+                dict(existing.scoring_weights) if existing else {}
+            )
+        scoring_weights["include_screenshots"] = body.include_screenshots
+
+    api_keys: dict | None = None
+    if body.api_keys is not None:
+        api_keys = body.api_keys.model_dump(exclude_none=True)
+
+    prefs = await repo.upsert(
+        user.id, scoring_weights=scoring_weights, api_keys=api_keys
+    )
+
+    return UserPreferencesResponse(
+        scoring_weights=ScoringWeightsSchema(
+            **{
+                k: v
+                for k, v in prefs.scoring_weights.items()
+                if k != "include_screenshots"
+            }
+        ),
+        api_keys=UserApiKeysSchema(**prefs.api_keys),
+        include_screenshots=prefs.scoring_weights.get(
+            "include_screenshots", True
+        ),
+    )

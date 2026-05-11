@@ -18,12 +18,14 @@ from aloha.db.models.score import Score
 from aloha.db.models.source_screenshot import SourceScreenshot
 from aloha.db.models.tax_lien import TaxLien
 from aloha.db.models.user import User
+from aloha.db.models.user_preferences import UserPreferences
 
 __all__ = [
     "Base",
     "TimestampMixin",
     # Core entities
     "User",
+    "UserPreferences",
     "Parcel",
     "TaxLien",
     "Owner",

@@ -5,6 +5,7 @@ from aloha.db.repositories.owner import EntityRepository, OwnerRepository
 from aloha.db.repositories.parcel import ParcelRepository
 from aloha.db.repositories.queue import QueueRepository
 from aloha.db.repositories.tax_lien import TaxLienRepository
+from aloha.db.repositories.user_preferences import UserPreferencesRepository
 
 __all__ = [
     "CountyUrlRepository",
@@ -13,4 +14,5 @@ __all__ = [
     "OwnerRepository",
     "EntityRepository",
     "QueueRepository",
+    "UserPreferencesRepository",
 ]

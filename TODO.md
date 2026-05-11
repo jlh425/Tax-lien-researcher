@@ -30,8 +30,8 @@
 
 - [x] **4.1 — Wire UCC MCP server** — search_ucc_filings integrated into Entity Research Agent (commit `8ce9880`)
 - [x] **4.2 — Wire Court Records MCP server** — federal cases, state liens, bankruptcy filtered into Entity fields (commit `8ce9880`)
-- [ ] **4.3 — Scoring Agent financial health signals** — Factor UCC, liens, bankruptcy into scoring models
-- [ ] **4.4 — Business Contact Enrichment** — Populate Entity.website/phone/email via People Data Labs
+- [x] **4.3 — Scoring Agent financial health signals** — `_apply_financial_health()` boosts motivation from UCC/liens/bankruptcy (commit `948fb9e`)
+- [x] **4.4 — Business Contact Enrichment** — People Data Labs + Hunter.io email verification (commit `948fb9e`)
 
 ---
 

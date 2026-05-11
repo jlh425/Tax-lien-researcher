@@ -100,3 +100,37 @@ class DeleteLlmRequest(BaseModel):
 
 class ConfiguredLlmsResponse(BaseModel):
     llms: list[ConfiguredLlmOut]
+
+
+# ── User Preferences (scoring weights / external API keys) ───────────────────
+
+
+class ScoringWeightsSchema(BaseModel):
+    """Scoring weight sliders — values should sum to 100."""
+
+    lien_to_value: int = Field(default=25, ge=0, le=100)
+    redemption_urgency: int = Field(default=25, ge=0, le=100)
+    owner_motivation: int = Field(default=25, ge=0, le=100)
+    contact_reachability: int = Field(default=25, ge=0, le=100)
+
+
+class UserApiKeysSchema(BaseModel):
+    """User-provided external API keys (e.g. Google Maps)."""
+
+    google_maps: str | None = None
+
+
+class UserPreferencesRequest(BaseModel):
+    """PUT body for saving user preferences."""
+
+    scoring_weights: ScoringWeightsSchema | None = None
+    api_keys: UserApiKeysSchema | None = None
+    include_screenshots: bool | None = None
+
+
+class UserPreferencesResponse(BaseModel):
+    """GET response with current user preferences."""
+
+    scoring_weights: ScoringWeightsSchema
+    api_keys: UserApiKeysSchema
+    include_screenshots: bool
