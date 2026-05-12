@@ -194,6 +194,14 @@ class ArcGISParcelScraper(BaseScraper):
         }
 
 
+class _ImageFetcher(BaseScraper):
+    """Minimal concrete BaseScraper used internally by ArcGISMapExporter."""
+
+    async def scrape(self, url: str, params: dict[str, Any] | None = None) -> Any:
+        resp = await self._fetch(url, params=params)
+        return resp.content
+
+
 class ArcGISMapExporter:
     """Exports a static PNG map image from an ArcGIS MapServer.
 
@@ -208,7 +216,7 @@ class ArcGISMapExporter:
                          Example: ``https://gis.example.gov/arcgis/rest/services/Parcels/MapServer``
             layer_ids: Layers to show, e.g. ``"show:0,1,2"`` (parcels + zoning).
         """
-        self._base = BaseScraper()
+        self._base = _ImageFetcher()
         self.service_url = service_url.rstrip("/")
         self.layer_ids = layer_ids
 
