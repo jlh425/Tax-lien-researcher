@@ -1,7 +1,8 @@
 """Application configuration via Pydantic BaseSettings."""
 
-from typing import Literal
+from typing import Literal, Self
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -28,6 +29,9 @@ class Settings(BaseSettings):
     secret_key: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
+
+    # ── CORS ───────────────────────────────────────────────────────────────
+    cors_allowed_origins: list[str] = ["http://localhost:5173"]
 
     # ── LLM Provider ──────────────────────────────────────────────────────
     # Supported providers: anthropic, openai, ollama, groq, openai-compatible
@@ -110,6 +114,18 @@ class Settings(BaseSettings):
     # ── Runtime ───────────────────────────────────────────────────────────
     environment: str = "development"
     log_level: str = "DEBUG"
+
+    @model_validator(mode="after")
+    def _check_production_secret_key(self) -> Self:
+        if (
+            self.environment == "production"
+            and self.secret_key == "change-me-in-production"
+        ):
+            raise ValueError(
+                "SECRET_KEY must be explicitly set in production — "
+                "the default value is not allowed."
+            )
+        return self
 
     model_config = {
         "env_file": ".env",

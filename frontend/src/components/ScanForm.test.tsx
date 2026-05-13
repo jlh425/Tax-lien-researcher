@@ -18,8 +18,8 @@ describe("ScanForm", () => {
   it("renders form fields", () => {
     renderWithProviders(<ScanForm onClose={() => {}} onSuccess={() => {}} />);
     expect(screen.getByText("New Discovery Scan")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("e.g. FL")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("e.g. orange")).toBeInTheDocument();
+    expect(screen.getByText("Select a state\u2026")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Select a state first")).toBeInTheDocument();
     expect(screen.getByText("Start Scan")).toBeInTheDocument();
   });
 

@@ -108,12 +108,80 @@ class TestFallbackNarrative:
 
     def test_no_total_owed_omitted(self):
         report = {
-            "parcel_id": "X", "instrument_type": "lien_certificate", "recommended_action": "monitor",
+            "parcel_id": "X", "instrument_type": "lien_certificate",
+            "recommended_action": "monitor",
             "property": {"address": "123 St"}, "lien": {},
-            "score": {"overall_score": 50, "risk_flags": []}, "owner": {"owner_of_record": "DOE"},
+            "score": {"overall_score": 50, "risk_flags": []},
+            "owner": {"owner_of_record": "DOE"},
         }
         result = _fallback_narrative({}, report)
         assert "Amount Owed" not in result
+
+    def test_non_dict_sections_handled(self):
+        """Non-dict property/lien/score/owner values should not crash."""
+        report = {
+            "parcel_id": "BAD-001",
+            "instrument_type": None,
+            "recommended_action": None,
+            "property": "not a dict",
+            "lien": 42,
+            "score": None,
+            "owner": [],
+        }
+        result = _fallback_narrative({}, report)
+        assert "BAD-001" in result
+        assert "INVESTMENT MEMO" in result
+
+    def test_empty_report(self):
+        """Completely empty report should produce graceful output."""
+        result = _fallback_narrative({}, {})
+        assert "INVESTMENT MEMO" in result
+        assert "N/A" in result
+
+    def test_non_numeric_total_owed(self):
+        """Non-numeric total_owed should not crash."""
+        report = {
+            "parcel_id": "X",
+            "instrument_type": "lien_certificate",
+            "recommended_action": "monitor",
+            "property": {},
+            "lien": {"total_owed": "not-a-number"},
+            "score": {"overall_score": 50, "risk_flags": []},
+            "owner": {},
+        }
+        result = _fallback_narrative({}, report)
+        assert "Amount Owed" in result
+        assert "not-a-number" in result
+
+    def test_risk_flags_non_list(self):
+        """risk_flags that is not a list should not crash."""
+        report = {
+            "parcel_id": "X",
+            "instrument_type": "lien_certificate",
+            "recommended_action": "pass",
+            "property": {},
+            "lien": {},
+            "score": {"overall_score": 30, "risk_flags": "bad_type"},
+            "owner": {},
+        }
+        result = _fallback_narrative({}, report)
+        assert "Risk Flags: None" in result
+
+    def test_empty_score_and_lien(self):
+        """Empty score and lien dicts should be handled safely."""
+        report = {
+            "parcel_id": "EMPTY-001",
+            "instrument_type": "tax_deed",
+            "recommended_action": "research_further",
+            "property": {"address": "789 Pine"},
+            "lien": {},
+            "score": {},
+            "owner": {},
+        }
+        result = _fallback_narrative({}, report)
+        assert "EMPTY-001" in result
+        assert "789 Pine" in result
+        assert "N/A" in result  # overall_score defaults to N/A
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

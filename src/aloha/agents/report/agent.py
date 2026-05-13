@@ -238,8 +238,12 @@ def _extract_condition_summary(content: str) -> str:
         summary = json.loads(content).get("summary", "")
         if summary:
             return summary
-    except Exception:
-        pass
+    except (json.JSONDecodeError, TypeError, AttributeError) as e:
+        log.warning(
+            "condition_summary_parse_failed",
+            error=str(e),
+            content_length=len(content) if content else 0,
+        )
     return content[:200]
 
 
@@ -256,22 +260,43 @@ def _obj_to_dict(obj: Any) -> dict[str, Any]:
 
 def _fallback_narrative(data: dict[str, Any], report: dict[str, Any]) -> str:
     """Generate a minimal narrative without LLM when model is unavailable."""
-    prop = report.get("property", {})
-    lien = report.get("lien", {})
-    score = report.get("score", {})
-    owner = report.get("owner", {})
+    try:
+        prop = report.get("property") if isinstance(report.get("property"), dict) else {}
+        lien = report.get("lien") if isinstance(report.get("lien"), dict) else {}
+        score = report.get("score") if isinstance(report.get("score"), dict) else {}
+        owner = report.get("owner") if isinstance(report.get("owner"), dict) else {}
 
-    parts = [
-        f"INVESTMENT MEMO — {report.get('parcel_id', 'N/A')}",
-        f"Address: {prop.get('address', 'Unknown')}",
-        f"Instrument: {report.get('instrument_type', 'N/A').replace('_', ' ').title()}",
-        f"Score: {score.get('overall_score', 'N/A')}/100",
-        f"Action: {report.get('recommended_action', 'N/A').replace('_', ' ').upper()}",
-        "",
-        f"Owner: {owner.get('owner_of_record', 'N/A')} ({owner.get('owner_type', 'N/A')})",
-        f"Absentee: {owner.get('is_absentee', 'Unknown')}",
-        "",
-        f"Amount Owed: ${lien.get('total_owed', 0):,.2f}" if lien.get("total_owed") else "",
-        f"Risk Flags: {', '.join(score.get('risk_flags', [])) or 'None'}",
-    ]
-    return "\n".join(p for p in parts if p is not None)
+        instrument_type = report.get("instrument_type") or "N/A"
+        action = report.get("recommended_action") or "N/A"
+
+        # Format total_owed safely — it might be non-numeric
+        total_owed = lien.get("total_owed")
+        amount_line = ""
+        if total_owed is not None:
+            try:
+                amount_line = f"Amount Owed: ${float(total_owed):,.2f}"
+            except (ValueError, TypeError):
+                amount_line = f"Amount Owed: {total_owed}"
+
+        risk_flags = score.get("risk_flags")
+        if not isinstance(risk_flags, list):
+            risk_flags = []
+
+        parts = [
+            f"INVESTMENT MEMO — {report.get('parcel_id', 'N/A')}",
+            f"Address: {prop.get('address', 'Unknown')}",
+            f"Instrument: {str(instrument_type).replace('_', ' ').title()}",
+            f"Score: {score.get('overall_score', 'N/A')}/100",
+            f"Action: {str(action).replace('_', ' ').upper()}",
+            "",
+            f"Owner: {owner.get('owner_of_record', 'N/A')}"
+            f" ({owner.get('owner_type', 'N/A')})",
+            f"Absentee: {owner.get('is_absentee', 'Unknown')}",
+            "",
+            amount_line,
+            f"Risk Flags: {', '.join(str(f) for f in risk_flags) or 'None'}",
+        ]
+        return "\n".join(p for p in parts if p is not None)
+    except Exception as exc:
+        log.warning("fallback_narrative_failed", error=str(exc))
+        return f"INVESTMENT MEMO — {report.get('parcel_id', 'N/A')} (report error)"
