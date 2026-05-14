@@ -158,18 +158,30 @@ class TestRefreshStaleParcels:
     def agent(self):
         return DatabaseAgent()
 
+    @staticmethod
+    def _mock_session_with_parcels(parcels: list) -> AsyncMock:
+        """Build a mock session whose execute() returns *parcels* via scalars."""
+        mock_scalars = MagicMock()
+        mock_scalars.all.return_value = parcels
+
+        mock_result = MagicMock()
+        mock_result.scalars.return_value = mock_scalars
+
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(return_value=mock_result)
+        mock_session.commit = AsyncMock()
+        return mock_session
+
     @pytest.mark.asyncio
     async def test_marks_and_enqueues(self, agent):
         mock_parcel = _make_mock_parcel()
+        mock_session = self._mock_session_with_parcels([mock_parcel])
 
         mock_parcel_repo = MagicMock()
-        mock_parcel_repo.mark_stale = AsyncMock(return_value=[mock_parcel])
+        mock_parcel_repo.mark_stale = AsyncMock(return_value=1)
 
         mock_queue_repo = MagicMock()
         mock_queue_repo.enqueue = AsyncMock()
-
-        mock_session = AsyncMock()
-        mock_session.commit = AsyncMock()
 
         with _patch_async_session(mock_session):
             with patch(
@@ -187,14 +199,13 @@ class TestRefreshStaleParcels:
 
     @pytest.mark.asyncio
     async def test_no_stale_parcels(self, agent):
+        mock_session = self._mock_session_with_parcels([])
+
         mock_parcel_repo = MagicMock()
-        mock_parcel_repo.mark_stale = AsyncMock(return_value=[])
+        mock_parcel_repo.mark_stale = AsyncMock(return_value=0)
 
         mock_queue_repo = MagicMock()
         mock_queue_repo.enqueue = AsyncMock()
-
-        mock_session = AsyncMock()
-        mock_session.commit = AsyncMock()
 
         with _patch_async_session(mock_session):
             with patch(
@@ -218,15 +229,13 @@ class TestRefreshStaleParcels:
             _make_mock_parcel("P-002", "CO", "denver", "456 Oak Ave"),
             _make_mock_parcel("P-003", "IA", "polk", "789 Elm Dr"),
         ]
+        mock_session = self._mock_session_with_parcels(parcels)
 
         mock_parcel_repo = MagicMock()
-        mock_parcel_repo.mark_stale = AsyncMock(return_value=parcels)
+        mock_parcel_repo.mark_stale = AsyncMock(return_value=3)
 
         mock_queue_repo = MagicMock()
         mock_queue_repo.enqueue = AsyncMock()
-
-        mock_session = AsyncMock()
-        mock_session.commit = AsyncMock()
 
         with _patch_async_session(mock_session):
             with patch(
@@ -246,15 +255,13 @@ class TestRefreshStaleParcels:
     async def test_enqueue_payload_contains_parcel_data(self, agent):
         """Verify the enqueue call carries the correct payload from the parcel."""
         parcel = _make_mock_parcel("P-XYZ", "CO", "denver", "999 Pike Pl")
+        mock_session = self._mock_session_with_parcels([parcel])
 
         mock_parcel_repo = MagicMock()
-        mock_parcel_repo.mark_stale = AsyncMock(return_value=[parcel])
+        mock_parcel_repo.mark_stale = AsyncMock(return_value=1)
 
         mock_queue_repo = MagicMock()
         mock_queue_repo.enqueue = AsyncMock()
-
-        mock_session = AsyncMock()
-        mock_session.commit = AsyncMock()
 
         with _patch_async_session(mock_session):
             with patch(
@@ -283,13 +290,12 @@ class TestRefreshStaleParcels:
     @pytest.mark.asyncio
     async def test_custom_stale_after_days(self, agent):
         """The cutoff datetime is computed from stale_after_days param."""
+        mock_session = self._mock_session_with_parcels([])
+
         mock_parcel_repo = MagicMock()
-        mock_parcel_repo.mark_stale = AsyncMock(return_value=[])
+        mock_parcel_repo.mark_stale = AsyncMock(return_value=0)
 
         mock_queue_repo = MagicMock()
-
-        mock_session = AsyncMock()
-        mock_session.commit = AsyncMock()
 
         with _patch_async_session(mock_session):
             with patch(
@@ -303,21 +309,20 @@ class TestRefreshStaleParcels:
                     count = await agent.refresh_stale_parcels(stale_after_days=7)
 
         assert count == 0
-        # Verify mark_stale was called with an older_than cutoff
+        # Verify mark_stale was called with older_than_hours
         mock_parcel_repo.mark_stale.assert_called_once()
         call_kwargs = mock_parcel_repo.mark_stale.call_args
-        # The agent passes older_than=<datetime>, verify the kwarg name
-        assert "older_than" in call_kwargs.kwargs
+        assert "older_than_hours" in call_kwargs.kwargs
+        assert call_kwargs.kwargs["older_than_hours"] == 7 * 24
 
     @pytest.mark.asyncio
     async def test_session_commit_called(self, agent):
         """Session is committed after processing stale parcels."""
-        mock_parcel_repo = MagicMock()
-        mock_parcel_repo.mark_stale = AsyncMock(return_value=[])
-        mock_queue_repo = MagicMock()
+        mock_session = self._mock_session_with_parcels([])
 
-        mock_session = AsyncMock()
-        mock_session.commit = AsyncMock()
+        mock_parcel_repo = MagicMock()
+        mock_parcel_repo.mark_stale = AsyncMock(return_value=0)
+        mock_queue_repo = MagicMock()
 
         with _patch_async_session(mock_session):
             with patch(
@@ -336,12 +341,12 @@ class TestRefreshStaleParcels:
     async def test_enqueue_priority_is_three(self, agent):
         """Stale-parcel re-enqueue jobs use priority 3 (lower-than-default)."""
         parcel = _make_mock_parcel()
+        mock_session = self._mock_session_with_parcels([parcel])
+
         mock_parcel_repo = MagicMock()
-        mock_parcel_repo.mark_stale = AsyncMock(return_value=[parcel])
+        mock_parcel_repo.mark_stale = AsyncMock(return_value=1)
         mock_queue_repo = MagicMock()
         mock_queue_repo.enqueue = AsyncMock()
-        mock_session = AsyncMock()
-        mock_session.commit = AsyncMock()
 
         with _patch_async_session(mock_session):
             with patch(
@@ -681,7 +686,7 @@ class TestResetStalledItems:
             ):
                 await agent.reset_stalled_items(stall_minutes=60)
 
-        mock_queue_repo.reset_stalled.assert_called_once_with(stall_minutes=60)
+        mock_queue_repo.reset_stalled.assert_called_once_with(stalled_after_minutes=60)
 
     @pytest.mark.asyncio
     async def test_default_stall_minutes(self, agent):
@@ -699,7 +704,7 @@ class TestResetStalledItems:
             ):
                 await agent.reset_stalled_items()
 
-        mock_queue_repo.reset_stalled.assert_called_once_with(stall_minutes=30)
+        mock_queue_repo.reset_stalled.assert_called_once_with(stalled_after_minutes=30)
 
     @pytest.mark.asyncio
     async def test_session_committed(self, agent):

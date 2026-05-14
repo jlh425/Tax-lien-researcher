@@ -35,6 +35,7 @@ def _get_server() -> CourtRecordsMCPServer:
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+
 @router.get("/cases", response_model=CaseSearchResponse)
 async def search_federal_cases(
     party_name: str = Query(..., description="Name of a party (plaintiff or defendant)"),

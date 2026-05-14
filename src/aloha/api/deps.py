@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from aloha.config import Settings, settings
 from aloha.db.engine import async_session_factory
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -83,7 +85,7 @@ def get_settings() -> Settings:
 
 def get_auth_service(
     db: AsyncSession = Depends(get_db),
-) -> "AuthService":
+) -> AuthService:
     """Return an AuthService bound to the current request session."""
     from aloha.services.auth_service import AuthService
 
@@ -92,7 +94,7 @@ def get_auth_service(
 
 def get_parcel_service(
     db: AsyncSession = Depends(get_db),
-) -> "ParcelService":
+) -> ParcelService:
     """Return a ParcelService bound to the current request session."""
     from aloha.services.parcel_service import ParcelService
 
@@ -101,7 +103,7 @@ def get_parcel_service(
 
 def get_billing_service(
     db: AsyncSession = Depends(get_db),
-) -> "BillingService":
+) -> BillingService:
     """Return a BillingService bound to the current request session."""
     from aloha.services.billing_service import BillingService
 
@@ -110,7 +112,7 @@ def get_billing_service(
 
 def get_research_service(
     db: AsyncSession = Depends(get_db),
-) -> "ResearchService":
+) -> ResearchService:
     """Return a ResearchService bound to the current request session."""
     from aloha.services.billing_service import BillingService
     from aloha.services.research_service import ResearchService
@@ -120,7 +122,7 @@ def get_research_service(
 
 def get_export_service(
     db: AsyncSession = Depends(get_db),
-) -> "ExportService":
+) -> ExportService:
     """Return an ExportService bound to the current request session."""
     from aloha.services.export_service import ExportService
 
@@ -129,7 +131,7 @@ def get_export_service(
 
 def get_outreach_service(
     db: AsyncSession = Depends(get_db),
-) -> "OutreachService":
+) -> OutreachService:
     """Return an OutreachService bound to the current request session."""
     from aloha.services.outreach_service import OutreachService
 
@@ -138,7 +140,7 @@ def get_outreach_service(
 
 def get_notification_service(
     db: AsyncSession = Depends(get_db),
-) -> "NotificationService":
+) -> NotificationService:
     """Return a NotificationService bound to the current request session."""
     from aloha.services.notification_service import NotificationService
 

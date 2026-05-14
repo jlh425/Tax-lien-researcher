@@ -68,8 +68,9 @@ class CourtListenerProvider:
         log.debug("courtlistener_search", params=params)
         response = await client.get("/api/rest/v4/search/", params=params)
         response.raise_for_status()
-        data = response.json()
-        return data.get("results", [])
+        data: dict[str, Any] = response.json()
+        results: list[dict[str, Any]] = data.get("results", [])
+        return results
 
     async def get_detail(self, docket_id: int | str) -> dict[str, Any] | None:
         """Fetch full docket detail by ID.
@@ -80,7 +81,8 @@ class CourtListenerProvider:
         log.debug("courtlistener_detail", docket_id=docket_id)
         response = await client.get(f"/api/rest/v4/dockets/{docket_id}/")
         response.raise_for_status()
-        return response.json()
+        detail: dict[str, Any] = response.json()
+        return detail
 
     async def close(self) -> None:
         if self._client and not self._client.is_closed:
@@ -113,8 +115,8 @@ class StateLienScraper:
     }
 
     def __init__(self) -> None:
-        from aloha.scrapers.stealth.helper import StealthHelper
         from aloha.scrapers.rate_limiter import TokenBucketRateLimiter
+        from aloha.scrapers.stealth.helper import StealthHelper
 
         self._stealth = StealthHelper()
         self._limiter = TokenBucketRateLimiter(rate=1.0, burst=3)
@@ -154,9 +156,7 @@ class StateLienScraper:
             )
         return []
 
-    async def _scrape_fl(
-        self, debtor_name: str, lien_type: str | None
-    ) -> list[dict[str, Any]]:
+    async def _scrape_fl(self, debtor_name: str, lien_type: str | None) -> list[dict[str, Any]]:
         """Scrape Florida Dept of Revenue tax warrant search."""
         from playwright.async_api import async_playwright
 
@@ -168,9 +168,7 @@ class StateLienScraper:
             try:
                 context = await self._stealth.new_context(browser)
                 page = await context.new_page()
-                await page.goto(
-                    portal["url"], wait_until="networkidle", timeout=30_000
-                )
+                await page.goto(portal["url"], wait_until="networkidle", timeout=30_000)
                 await self._stealth.human_delay()
 
                 # Fill debtor name field — try multiple selectors
@@ -193,7 +191,7 @@ class StateLienScraper:
                     'input[type="submit"]',
                     'button[type="submit"]',
                     'input[value*="Search"]',
-                    '#btnSearch',
+                    "#btnSearch",
                     'a[id*="Search"]',
                 ]:
                     try:
@@ -206,21 +204,16 @@ class StateLienScraper:
 
                 # Parse result table
                 rows = await page.query_selector_all(
-                    "table.results tr, table[id*='grid'] tr, "
-                    "#GridView1 tr, .rgMasterTable tr"
+                    "table.results tr, table[id*='grid'] tr, #GridView1 tr, .rgMasterTable tr"
                 )
                 for row in rows[1:]:  # skip header
                     cells = await row.query_selector_all("td")
                     if len(cells) >= 4:
-                        texts = [
-                            (await c.inner_text()).strip() for c in cells
-                        ]
+                        texts = [(await c.inner_text()).strip() for c in cells]
                         record: dict[str, Any] = {
                             "debtor": texts[0] if texts[0] else None,
                             "filing_number": texts[1] if len(texts) > 1 else None,
-                            "amount": self._parse_amount(
-                                texts[2] if len(texts) > 2 else ""
-                            ),
+                            "amount": self._parse_amount(texts[2] if len(texts) > 2 else ""),
                             "filing_date": texts[3] if len(texts) > 3 else None,
                             "lien_type": lien_type or "tax",
                             "state": "FL",
@@ -238,9 +231,7 @@ class StateLienScraper:
 
         return results
 
-    async def _scrape_tx(
-        self, debtor_name: str, lien_type: str | None
-    ) -> list[dict[str, Any]]:
+    async def _scrape_tx(self, debtor_name: str, lien_type: str | None) -> list[dict[str, Any]]:
         """Scrape Texas Comptroller tax warrant search."""
         from playwright.async_api import async_playwright
 
@@ -252,9 +243,7 @@ class StateLienScraper:
             try:
                 context = await self._stealth.new_context(browser)
                 page = await context.new_page()
-                await page.goto(
-                    portal["url"], wait_until="networkidle", timeout=30_000
-                )
+                await page.goto(portal["url"], wait_until="networkidle", timeout=30_000)
                 await self._stealth.human_delay()
 
                 # Fill debtor name field
@@ -278,7 +267,7 @@ class StateLienScraper:
                     'input[type="submit"]',
                     'button[type="submit"]',
                     'input[value*="Search"]',
-                    '#btnSearch',
+                    "#btnSearch",
                 ]:
                     try:
                         await page.click(btn, timeout=2000)
@@ -289,21 +278,15 @@ class StateLienScraper:
                 await page.wait_for_load_state("networkidle", timeout=15_000)
 
                 # Parse results
-                rows = await page.query_selector_all(
-                    "table tr, .search-results tr, #results tr"
-                )
+                rows = await page.query_selector_all("table tr, .search-results tr, #results tr")
                 for row in rows[1:]:
                     cells = await row.query_selector_all("td")
                     if len(cells) >= 3:
-                        texts = [
-                            (await c.inner_text()).strip() for c in cells
-                        ]
+                        texts = [(await c.inner_text()).strip() for c in cells]
                         record: dict[str, Any] = {
                             "debtor": texts[0] if texts[0] else None,
                             "filing_number": texts[1] if len(texts) > 1 else None,
-                            "amount": self._parse_amount(
-                                texts[2] if len(texts) > 2 else ""
-                            ),
+                            "amount": self._parse_amount(texts[2] if len(texts) > 2 else ""),
                             "filing_date": texts[3] if len(texts) > 3 else None,
                             "lien_type": lien_type or "tax",
                             "state": "TX",

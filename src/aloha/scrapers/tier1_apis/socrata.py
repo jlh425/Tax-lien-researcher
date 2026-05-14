@@ -124,16 +124,18 @@ class SocrataDiscoveryScraper(BaseScraper):
             raw_page: list[dict[str, Any]] = await self.scrape(url, params=params)
 
             if not raw_page:
-                break   # no more data
+                break  # no more data
 
             normalised = [self._normalise(row, field_map) for row in raw_page]
             all_records.extend(r for r in normalised if r)
             offset += len(raw_page)
 
             if len(raw_page) < page_size:
-                break   # last page
+                break  # last page
 
-        log.info("socrata_discovery_done", state=self.state, county=self.county, count=len(all_records))
+        log.info(
+            "socrata_discovery_done", state=self.state, county=self.county, count=len(all_records)
+        )
         return all_records
 
     # ── Normalisation ─────────────────────────────────────────────────────
@@ -147,10 +149,9 @@ class SocrataDiscoveryScraper(BaseScraper):
 
         Returns ``None`` if the record is missing its parcel ID.
         """
+        assert self._config is not None  # guarded in discover()
         out: dict[str, Any] = {
-            "source_url": _build_soda_url(
-                self._config["base_url"], self._config["dataset_id"]
-            ),
+            "source_url": _build_soda_url(self._config["base_url"], self._config["dataset_id"]),
         }
 
         for canonical, socrata_col in field_map.items():
@@ -178,6 +179,7 @@ class SocrataDiscoveryScraper(BaseScraper):
 
 
 # ── Conversion helpers ────────────────────────────────────────────────────────
+
 
 def _to_float(value: Any) -> float | None:
     try:

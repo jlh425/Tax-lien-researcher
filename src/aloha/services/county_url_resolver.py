@@ -39,7 +39,11 @@ _STATIC_REGISTRY: dict[tuple[str, str, str], str] = {
     ("FL", "duval", "assessor"): "https://www.coj.net/departments/property-appraiser",
     ("FL", "duval", "tax_collector"): "https://www.coj.net/departments/finance/tax-collector",
     ("FL", "hillsborough", "assessor"): "https://www.hcpafl.org",
-    ("FL", "hillsborough", "tax_collector"): "https://hillsboroughcounty.org/residents/property-owners-and-renters/pay-property-taxes",
+    (
+        "FL",
+        "hillsborough",
+        "tax_collector",
+    ): "https://hillsboroughcounty.org/residents/property-owners-and-renters/pay-property-taxes",
     ("FL", "miami-dade", "assessor"): "https://www.miamidadepa.gov",
     ("FL", "miami-dade", "tax_collector"): "https://www.miamidade.gov/taxcollector",
     ("FL", "broward", "assessor"): "https://web.bcpa.net",
@@ -75,9 +79,7 @@ _STATIC_REGISTRY: dict[tuple[str, str, str], str] = {
 class CountyUrlResolver:
     """Resolves assessor/tax-collector URLs for any county via 4-layer pipeline."""
 
-    async def resolve(
-        self, state: str, county: str, url_type: str = "assessor"
-    ) -> str | None:
+    async def resolve(self, state: str, county: str, url_type: str = "assessor") -> str | None:
         """Return the best URL for a county's assessor/tax portal.
 
         Tries each layer in order; persists successful results to DB.
@@ -107,7 +109,9 @@ class CountyUrlResolver:
             if validated:
                 log.info(
                     "resolved_via_search_and_validation",
-                    state=state, county=county, url=validated,
+                    state=state,
+                    county=county,
+                    url=validated,
                 )
                 await self._persist_url(
                     state, county, url_type, validated, confidence=0.9, source="llm_validated"
@@ -118,7 +122,9 @@ class CountyUrlResolver:
             best = candidates[0]
             log.info(
                 "resolved_via_search_unvalidated",
-                state=state, county=county, url=best,
+                state=state,
+                county=county,
+                url=best,
             )
             await self._persist_url(
                 state, county, url_type, best, confidence=0.5, source="searxng"
@@ -130,9 +136,7 @@ class CountyUrlResolver:
 
     # ── Layer 1: Database cache ───────────────────────────────────────────
 
-    async def _check_database(
-        self, state: str, county: str, url_type: str
-    ) -> str | None:
+    async def _check_database(self, state: str, county: str, url_type: str) -> str | None:
         try:
             async with async_session_factory() as session:
                 repo = CountyUrlRepository(session)
@@ -144,16 +148,12 @@ class CountyUrlResolver:
 
     # ── Layer 2: Static registry ──────────────────────────────────────────
 
-    def _check_static_registry(
-        self, state: str, county: str, url_type: str
-    ) -> str | None:
+    def _check_static_registry(self, state: str, county: str, url_type: str) -> str | None:
         return _STATIC_REGISTRY.get((state, county, url_type))
 
     # ── Layer 3: Web search via SearXNG ───────────────────────────────────
 
-    async def _search_web(
-        self, state: str, county: str, url_type: str
-    ) -> list[str]:
+    async def _search_web(self, state: str, county: str, url_type: str) -> list[str]:
         """Search SearXNG for county assessor/tax URLs. Returns candidate URLs."""
         query = f"{county} county {state} {url_type.replace('_', ' ')} property tax site:.gov"
         try:
@@ -199,9 +199,7 @@ class CountyUrlResolver:
         if has_gov and (has_keyword or has_county):
             return True
         # Accept if both keyword and county match even without .gov
-        if has_keyword and has_county:
-            return True
-        return False
+        return bool(has_keyword and has_county)
 
     # ── Layer 4: LLM validation via Ollama ────────────────────────────────
 
@@ -217,9 +215,7 @@ class CountyUrlResolver:
                         continue
                     page_text = resp.text[:3000]  # First 3KB of HTML
 
-                validated = await self._ask_llm_is_tax_portal(
-                    page_text, county, state, url_type
-                )
+                validated = await self._ask_llm_is_tax_portal(page_text, county, state, url_type)
                 if validated:
                     return url
             except Exception:

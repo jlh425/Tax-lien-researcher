@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from fastapi import APIRouter, Depends, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from aloha.api.deps import get_db, get_settings
 from aloha.api.schemas.parcels import LoginRequest, RegisterRequest, TokenResponse
-from aloha.config import Settings
 from aloha.services.auth_service import AuthService
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from aloha.config import Settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 

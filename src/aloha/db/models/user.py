@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
-from sqlalchemy import Boolean, Integer, String, Text
+from sqlalchemy import Boolean, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -26,7 +27,7 @@ class User(Base, TimestampMixin):
     hashed_password: Mapped[str | None] = mapped_column(String(255))
 
     # OAuth
-    auth_provider: Mapped[str | None] = mapped_column(String(50))   # google|github|email
+    auth_provider: Mapped[str | None] = mapped_column(String(50))  # google|github|email
     auth_provider_id: Mapped[str | None] = mapped_column(String(255))
 
     # Subscription
@@ -39,22 +40,22 @@ class User(Base, TimestampMixin):
     outreach_mode: Mapped[str] = mapped_column(String(50), nullable=False, default="individual")
     outreach_email: Mapped[str | None] = mapped_column(String(255))
     outreach_domain: Mapped[str | None] = mapped_column(String(255))
-    sendgrid_api_key: Mapped[str | None] = mapped_column(Text)        # encrypted
+    sendgrid_api_key: Mapped[str | None] = mapped_column(Text)  # encrypted
     twilio_account_sid: Mapped[str | None] = mapped_column(String(255))  # encrypted
-    twilio_auth_token: Mapped[str | None] = mapped_column(Text)       # encrypted
+    twilio_auth_token: Mapped[str | None] = mapped_column(Text)  # encrypted
     twilio_phone_number: Mapped[str | None] = mapped_column(String(50))
-    physical_address: Mapped[str | None] = mapped_column(Text)        # CAN-SPAM required
+    physical_address: Mapped[str | None] = mapped_column(Text)  # CAN-SPAM required
 
     # Flexible per-user settings blob
-    settings: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    settings: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
 
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     # ── Relationships ─────────────────────────────────────────────────────
-    parcels: Mapped[list["Parcel"]] = relationship(  # noqa: F821
+    parcels: Mapped[list[Parcel]] = relationship(  # noqa: F821
         "Parcel", back_populates="user", lazy="raise"
     )
-    outreach_logs: Mapped[list["OutreachLog"]] = relationship(  # noqa: F821
+    outreach_logs: Mapped[list[OutreachLog]] = relationship(  # noqa: F821
         "OutreachLog", back_populates="user", lazy="raise"
     )
 

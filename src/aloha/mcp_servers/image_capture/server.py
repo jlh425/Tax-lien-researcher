@@ -11,7 +11,7 @@ Images are saved to the DB (PropertyImage) keyed by (parcel_id, image_type).
 from __future__ import annotations
 
 import base64
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -34,74 +34,80 @@ class ImageCaptureMCPServer(BaseMCPServer):
         self._register_tools()
 
     def _register_tools(self) -> None:
-        self.register_tool(ToolDefinition(
-            name="capture_gis_map",
-            description=(
-                "Export a GIS parcel map PNG from an ArcGIS MapServer. "
-                "Returns base64-encoded PNG bytes and saves to the DB."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "parcel_id": {"type": "string"},
-                    "service_url": {
-                        "type": "string",
-                        "description": "ArcGIS MapServer URL (not feature layer).",
+        self.register_tool(
+            ToolDefinition(
+                name="capture_gis_map",
+                description=(
+                    "Export a GIS parcel map PNG from an ArcGIS MapServer. "
+                    "Returns base64-encoded PNG bytes and saves to the DB."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "parcel_id": {"type": "string"},
+                        "service_url": {
+                            "type": "string",
+                            "description": "ArcGIS MapServer URL (not feature layer).",
+                        },
+                        "bbox": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                            "minItems": 4,
+                            "maxItems": 4,
+                            "description": "[xmin, ymin, xmax, ymax] in WGS84.",
+                        },
+                        "width": {"type": "integer", "default": 800},
+                        "height": {"type": "integer", "default": 600},
                     },
-                    "bbox": {
-                        "type": "array",
-                        "items": {"type": "number"},
-                        "minItems": 4,
-                        "maxItems": 4,
-                        "description": "[xmin, ymin, xmax, ymax] in WGS84.",
+                    "required": ["parcel_id", "service_url", "bbox"],
+                },
+                handler=self.capture_gis_map,
+            )
+        )
+
+        self.register_tool(
+            ToolDefinition(
+                name="capture_street_view",
+                description=(
+                    "Capture a Google Street View image for a property address. "
+                    "Requires GOOGLE_MAPS_API_KEY. Returns base64-encoded JPEG."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "parcel_id": {"type": "string"},
+                        "address": {"type": "string", "description": "Full street address."},
+                        "width": {"type": "integer", "default": 800},
+                        "height": {"type": "integer", "default": 600},
                     },
-                    "width": {"type": "integer", "default": 800},
-                    "height": {"type": "integer", "default": 600},
+                    "required": ["parcel_id", "address"],
                 },
-                "required": ["parcel_id", "service_url", "bbox"],
-            },
-            handler=self.capture_gis_map,
-        ))
+                handler=self.capture_street_view,
+            )
+        )
 
-        self.register_tool(ToolDefinition(
-            name="capture_street_view",
-            description=(
-                "Capture a Google Street View image for a property address. "
-                "Requires GOOGLE_MAPS_API_KEY. Returns base64-encoded JPEG."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "parcel_id": {"type": "string"},
-                    "address": {"type": "string", "description": "Full street address."},
-                    "width": {"type": "integer", "default": 800},
-                    "height": {"type": "integer", "default": 600},
+        self.register_tool(
+            ToolDefinition(
+                name="capture_satellite",
+                description=(
+                    "Capture a Google Maps satellite image centred on a lat/lng. "
+                    "Requires GOOGLE_MAPS_API_KEY. Returns base64-encoded PNG."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "parcel_id": {"type": "string"},
+                        "latitude": {"type": "number"},
+                        "longitude": {"type": "number"},
+                        "zoom": {"type": "integer", "default": 18},
+                        "width": {"type": "integer", "default": 800},
+                        "height": {"type": "integer", "default": 600},
+                    },
+                    "required": ["parcel_id", "latitude", "longitude"],
                 },
-                "required": ["parcel_id", "address"],
-            },
-            handler=self.capture_street_view,
-        ))
-
-        self.register_tool(ToolDefinition(
-            name="capture_satellite",
-            description=(
-                "Capture a Google Maps satellite image centred on a lat/lng. "
-                "Requires GOOGLE_MAPS_API_KEY. Returns base64-encoded PNG."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "parcel_id": {"type": "string"},
-                    "latitude": {"type": "number"},
-                    "longitude": {"type": "number"},
-                    "zoom": {"type": "integer", "default": 18},
-                    "width": {"type": "integer", "default": 800},
-                    "height": {"type": "integer", "default": 600},
-                },
-                "required": ["parcel_id", "latitude", "longitude"],
-            },
-            handler=self.capture_satellite,
-        ))
+                handler=self.capture_satellite,
+            )
+        )
 
     # ── HTTP client ───────────────────────────────────────────────────────
 
@@ -137,7 +143,9 @@ class ImageCaptureMCPServer(BaseMCPServer):
             )
             await exporter.close()
 
-            await _save_image(parcel_id, "gis_parcel_map", png_bytes, "image/png", source_url=service_url)
+            await _save_image(
+                parcel_id, "gis_parcel_map", png_bytes, "image/png", source_url=service_url
+            )
             log.info("gis_map_captured", parcel_id=parcel_id, size=len(png_bytes))
             return {
                 "parcel_id": parcel_id,
@@ -172,8 +180,12 @@ class ImageCaptureMCPServer(BaseMCPServer):
             return {"error": "Street View fetch failed", "parcel_id": parcel_id}
 
         from aloha.mcp_servers.image_capture.providers import _GOOGLE_STREETVIEW_URL
+
         await _save_image(
-            parcel_id, "street_view", jpeg_bytes, "image/jpeg",
+            parcel_id,
+            "street_view",
+            jpeg_bytes,
+            "image/jpeg",
             source_url=_GOOGLE_STREETVIEW_URL,
         )
         log.info("street_view_captured", parcel_id=parcel_id, size=len(jpeg_bytes))
@@ -228,7 +240,10 @@ class ImageCaptureMCPServer(BaseMCPServer):
             return {"error": "All satellite providers failed", "parcel_id": parcel_id}
 
         await _save_image(
-            parcel_id, "satellite", png_bytes, "image/png",
+            parcel_id,
+            "satellite",
+            png_bytes,
+            "image/png",
             source_url="multi_provider",
         )
         log.info("satellite_captured", parcel_id=parcel_id, size=len(png_bytes))
@@ -242,6 +257,7 @@ class ImageCaptureMCPServer(BaseMCPServer):
 
 
 # ── DB persistence helper ─────────────────────────────────────────────────────
+
 
 async def _save_image(
     parcel_id: str,
@@ -262,7 +278,7 @@ async def _save_image(
 
     b64 = base64.b64encode(image_bytes).decode()
     data_uri = f"data:{mime_type};base64,{b64}"
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
 
     async with async_session_factory() as session:
         existing = await session.execute(
@@ -292,7 +308,9 @@ async def _save_image(
 
 # ── Factory ───────────────────────────────────────────────────────────────────
 
+
 def create_image_capture_server() -> ImageCaptureMCPServer:
     """Build the Image Capture MCP server from settings."""
     from aloha.config import settings
+
     return ImageCaptureMCPServer(google_api_key=settings.google_maps_api_key)

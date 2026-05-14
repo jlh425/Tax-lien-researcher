@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from aloha.api.deps import get_current_user, get_db
 from aloha.api.schemas.parcels import QueueStatusOut, ScanRequest, ScanResponse
 from aloha.services.billing_service import BillingService
 from aloha.services.research_service import ResearchService
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["scan"])
 
@@ -78,6 +80,7 @@ async def _run_discovery(
     except Exception:
         # Catch-all: top-level error boundary for background discovery task
         import structlog
+
         log = structlog.get_logger()
         log.exception("discovery_background_failed", state=state, county=county)
 

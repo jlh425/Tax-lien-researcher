@@ -62,8 +62,9 @@ class CobaltUCCProvider:
         log.debug("cobalt_ucc_search", params=params)
         response = await client.get("/ucc/search", params=params)
         response.raise_for_status()
-        data = response.json()
-        return data.get("filings", data.get("results", []))
+        data: dict[str, Any] = response.json()
+        result: list[dict[str, Any]] = data.get("filings", data.get("results", []))
+        return result
 
     async def get_detail(
         self,
@@ -78,7 +79,8 @@ class CobaltUCCProvider:
             params={"state": state.upper()},
         )
         response.raise_for_status()
-        return response.json()
+        detail: dict[str, Any] = response.json()
+        return detail
 
     async def close(self) -> None:
         if self._client and not self._client.is_closed:
@@ -116,8 +118,8 @@ class StateUCCScraper:
     }
 
     def __init__(self) -> None:
-        from aloha.scrapers.stealth.helper import StealthHelper
         from aloha.scrapers.rate_limiter import TokenBucketRateLimiter
+        from aloha.scrapers.stealth.helper import StealthHelper
 
         self._stealth = StealthHelper()
         self._limiter = TokenBucketRateLimiter(rate=1.0, burst=3)
@@ -159,9 +161,7 @@ class StateUCCScraper:
             )
         return []
 
-    async def _scrape_fl(
-        self, debtor_name: str, filing_type: str | None
-    ) -> list[dict[str, Any]]:
+    async def _scrape_fl(self, debtor_name: str, filing_type: str | None) -> list[dict[str, Any]]:
         """Scrape Florida Sunbiz UCC filing search."""
         from playwright.async_api import async_playwright
 
@@ -173,9 +173,7 @@ class StateUCCScraper:
             try:
                 context = await self._stealth.new_context(browser)
                 page = await context.new_page()
-                await page.goto(
-                    portal["url"], wait_until="networkidle", timeout=30_000
-                )
+                await page.goto(portal["url"], wait_until="networkidle", timeout=30_000)
                 await self._stealth.human_delay()
 
                 # Select "Debtor Name" search type if radio/dropdown exists
@@ -219,7 +217,7 @@ class StateUCCScraper:
                     'input[type="submit"]',
                     'button[type="submit"]',
                     'input[value*="Search"]',
-                    '#btnSearch',
+                    "#btnSearch",
                 ]:
                     try:
                         await page.click(btn, timeout=2000)
@@ -231,18 +229,13 @@ class StateUCCScraper:
 
                 # Parse result table
                 rows = await page.query_selector_all(
-                    "table tr, #GridView1 tr, .rgMasterTable tr, "
-                    "#searchResults tr"
+                    "table tr, #GridView1 tr, .rgMasterTable tr, #searchResults tr"
                 )
                 for row in rows[1:]:  # skip header
                     cells = await row.query_selector_all("td")
                     if len(cells) >= 3:
-                        texts = [
-                            (await c.inner_text()).strip() for c in cells
-                        ]
-                        record = self._build_filing(
-                            texts, state="FL", filing_type=filing_type
-                        )
+                        texts = [(await c.inner_text()).strip() for c in cells]
+                        record = self._build_filing(texts, state="FL", filing_type=filing_type)
                         if record:
                             results.append(record)
 
@@ -256,9 +249,7 @@ class StateUCCScraper:
 
         return results
 
-    async def _scrape_il(
-        self, debtor_name: str, filing_type: str | None
-    ) -> list[dict[str, Any]]:
+    async def _scrape_il(self, debtor_name: str, filing_type: str | None) -> list[dict[str, Any]]:
         """Scrape Illinois SOS UCC search."""
         from playwright.async_api import async_playwright
 
@@ -270,9 +261,7 @@ class StateUCCScraper:
             try:
                 context = await self._stealth.new_context(browser)
                 page = await context.new_page()
-                await page.goto(
-                    portal["url"], wait_until="networkidle", timeout=30_000
-                )
+                await page.goto(portal["url"], wait_until="networkidle", timeout=30_000)
                 await self._stealth.human_delay()
 
                 # IL SOS has a form with debtor name fields
@@ -282,7 +271,7 @@ class StateUCCScraper:
                     'input[name*="orgName"]',
                     'input[name*="debtorName"]',
                     'input[id*="OrgName"]',
-                    '#txtOrgName',
+                    "#txtOrgName",
                     'input[type="text"]',
                 ]:
                     try:
@@ -309,18 +298,12 @@ class StateUCCScraper:
                 await page.wait_for_load_state("networkidle", timeout=15_000)
 
                 # Parse results
-                rows = await page.query_selector_all(
-                    "table tr, .search-results tr, #results tr"
-                )
+                rows = await page.query_selector_all("table tr, .search-results tr, #results tr")
                 for row in rows[1:]:
                     cells = await row.query_selector_all("td")
                     if len(cells) >= 3:
-                        texts = [
-                            (await c.inner_text()).strip() for c in cells
-                        ]
-                        record = self._build_filing(
-                            texts, state="IL", filing_type=filing_type
-                        )
+                        texts = [(await c.inner_text()).strip() for c in cells]
+                        record = self._build_filing(texts, state="IL", filing_type=filing_type)
                         if record:
                             results.append(record)
 
@@ -334,9 +317,7 @@ class StateUCCScraper:
 
         return results
 
-    async def _scrape_oh(
-        self, debtor_name: str, filing_type: str | None
-    ) -> list[dict[str, Any]]:
+    async def _scrape_oh(self, debtor_name: str, filing_type: str | None) -> list[dict[str, Any]]:
         """Scrape Ohio SOS business portal UCC search."""
         from playwright.async_api import async_playwright
 
@@ -348,9 +329,7 @@ class StateUCCScraper:
             try:
                 context = await self._stealth.new_context(browser)
                 page = await context.new_page()
-                await page.goto(
-                    portal["url"], wait_until="networkidle", timeout=30_000
-                )
+                await page.goto(portal["url"], wait_until="networkidle", timeout=30_000)
                 await self._stealth.human_delay()
 
                 # OH portal may have UCC search tab/link
@@ -361,9 +340,7 @@ class StateUCCScraper:
                 ]:
                     try:
                         await page.click(nav, timeout=3000)
-                        await page.wait_for_load_state(
-                            "networkidle", timeout=10_000
-                        )
+                        await page.wait_for_load_state("networkidle", timeout=10_000)
                         break
                     except Exception:
                         continue
@@ -399,18 +376,12 @@ class StateUCCScraper:
 
                 await page.wait_for_load_state("networkidle", timeout=15_000)
 
-                rows = await page.query_selector_all(
-                    "table tr, .results tr, #searchResults tr"
-                )
+                rows = await page.query_selector_all("table tr, .results tr, #searchResults tr")
                 for row in rows[1:]:
                     cells = await row.query_selector_all("td")
                     if len(cells) >= 3:
-                        texts = [
-                            (await c.inner_text()).strip() for c in cells
-                        ]
-                        record = self._build_filing(
-                            texts, state="OH", filing_type=filing_type
-                        )
+                        texts = [(await c.inner_text()).strip() for c in cells]
+                        record = self._build_filing(texts, state="OH", filing_type=filing_type)
                         if record:
                             results.append(record)
 
@@ -458,9 +429,7 @@ class StateUCCScraper:
         for text in texts:
             if not text:
                 continue
-            if not filing_number and re.match(
-                r"^[A-Z0-9]{2,}[-]?\d+", text
-            ):
+            if not filing_number and re.match(r"^[A-Z0-9]{2,}[-]?\d+", text):
                 filing_number = text
             elif not filing_date and parse_date(text):
                 filing_date = text

@@ -17,7 +17,7 @@ Responsibilities:
 from __future__ import annotations
 
 import hashlib
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Any
 
 import structlog
@@ -31,21 +31,23 @@ from aloha.db.repositories.owner import EntityRepository
 log = structlog.get_logger().bind(agent="entity_research")
 
 # Commercial registered agent names — not useful for beneficial owner lookup
-_COMMERCIAL_RA_PATTERNS = frozenset({
-    "CT CORPORATION",
-    "CORPORATION SERVICE COMPANY",
-    "CSC",
-    "NORTHWEST REGISTERED AGENT",
-    "REGISTERED AGENTS INC",
-    "NATIONAL REGISTERED AGENTS",
-    "UNITED AGENT GROUP",
-    "INCORP SERVICES",
-    "LEGALZOOM",
-    "HARBOR COMPLIANCE",
-    "COGENCY GLOBAL",
-    "NRAI",
-    "THE CORPORATION TRUST COMPANY",
-})
+_COMMERCIAL_RA_PATTERNS = frozenset(
+    {
+        "CT CORPORATION",
+        "CORPORATION SERVICE COMPANY",
+        "CSC",
+        "NORTHWEST REGISTERED AGENT",
+        "REGISTERED AGENTS INC",
+        "NATIONAL REGISTERED AGENTS",
+        "UNITED AGENT GROUP",
+        "INCORP SERVICES",
+        "LEGALZOOM",
+        "HARBOR COMPLIANCE",
+        "COGENCY GLOBAL",
+        "NRAI",
+        "THE CORPORATION TRUST COMPANY",
+    }
+)
 
 # States commonly used for entity formation
 _FORMATION_STATE_SEARCH_ORDER = ["FL", "TX", "CA", "DE", "NV", "WY", "GA", "NY", "AZ"]
@@ -131,7 +133,9 @@ class EntityResearchAgent(BaseAgent):
 
         # ── Step 6: Business contact enrichment ───────────────────────────
         contact_data = await self._enrich_entity_contacts(
-            sos_result, entity_name, state,
+            sos_result,
+            entity_name,
+            state,
         )
 
         # ── Step 7: Persist Entity record ─────────────────────────────────
@@ -254,9 +258,7 @@ class EntityResearchAgent(BaseAgent):
             try:
                 result = await server.sos_search_by_registered_agent(ra, state, limit=limit)
                 entities = result.get("entities", [])
-                related_ids = [
-                    str(e["entity_id"]) for e in entities if e.get("entity_id")
-                ]
+                related_ids = [str(e["entity_id"]) for e in entities if e.get("entity_id")]
                 return related_ids[:limit]
             finally:
                 await server.close()
@@ -284,7 +286,8 @@ class EntityResearchAgent(BaseAgent):
 
         try:
             result = await server.search_ucc_filings(
-                debtor_name=entity_name, state=state,
+                debtor_name=entity_name,
+                state=state,
             )
             filings = result.get("filings", [])
             self.log.info(
@@ -340,7 +343,8 @@ class EntityResearchAgent(BaseAgent):
         try:
             # ── Federal cases (litigation + bankruptcy) ───────────────
             federal_result = await server.search_federal_cases(
-                party_name=entity_name, state=state,
+                party_name=entity_name,
+                state=state,
             )
             cases = federal_result.get("cases", [])
             pacer_results = cases
@@ -354,7 +358,8 @@ class EntityResearchAgent(BaseAgent):
 
             # ── State liens (tax liens) ───────────────────────────────
             lien_result = await server.search_state_liens(
-                debtor_name=entity_name, state=state,
+                debtor_name=entity_name,
+                state=state,
             )
             liens = lien_result.get("liens", [])
 
@@ -417,44 +422,36 @@ class EntityResearchAgent(BaseAgent):
         """Build a brief text digest of all court record findings."""
         parts: list[str] = [f"Court records summary for {entity_name}:"]
 
-        if not any([
-            federal_tax_liens, state_tax_liens,
-            bankruptcy_history, litigation_entries,
-        ]):
+        if not any(
+            [
+                federal_tax_liens,
+                state_tax_liens,
+                bankruptcy_history,
+                litigation_entries,
+            ]
+        ):
             return f"No court records found for {entity_name}."
 
         if federal_tax_liens:
-            total = sum(
-                float(lien.get("amount") or 0) for lien in federal_tax_liens
-            )
+            total = sum(float(lien.get("amount") or 0) for lien in federal_tax_liens)
             parts.append(
                 f"- {len(federal_tax_liens)} federal tax lien(s)"
                 + (f" totaling ${total:,.0f}" if total else "")
             )
 
         if state_tax_liens:
-            total = sum(
-                float(lien.get("amount") or 0) for lien in state_tax_liens
-            )
+            total = sum(float(lien.get("amount") or 0) for lien in state_tax_liens)
             parts.append(
                 f"- {len(state_tax_liens)} state tax lien(s)"
                 + (f" totaling ${total:,.0f}" if total else "")
             )
 
         if bankruptcy_history:
-            titles = [
-                b.get("case_title") or "Unknown"
-                for b in bankruptcy_history[:3]
-            ]
-            parts.append(
-                f"- {len(bankruptcy_history)} bankruptcy case(s): "
-                + "; ".join(titles)
-            )
+            titles = [b.get("case_title") or "Unknown" for b in bankruptcy_history[:3]]
+            parts.append(f"- {len(bankruptcy_history)} bankruptcy case(s): " + "; ".join(titles))
 
         if litigation_entries:
-            parts.append(
-                f"- {len(litigation_entries)} other litigation case(s)"
-            )
+            parts.append(f"- {len(litigation_entries)} other litigation case(s)")
 
         return "\n".join(parts)
 
@@ -504,7 +501,8 @@ class EntityResearchAgent(BaseAgent):
         try:
             # ── Enrich person via PDL ────────────────────────────────
             pdl_result = await server.enrich_person(
-                name=person_name, company=entity_name,
+                name=person_name,
+                company=entity_name,
             )
             if pdl_result.get("error"):
                 self.log.warning(
@@ -585,8 +583,14 @@ class EntityResearchAgent(BaseAgent):
                 domain = email.split("@", 1)[1].lower()
                 # Skip common webmail providers
                 if domain not in {
-                    "gmail.com", "yahoo.com", "hotmail.com", "outlook.com",
-                    "aol.com", "icloud.com", "protonmail.com", "mail.com",
+                    "gmail.com",
+                    "yahoo.com",
+                    "hotmail.com",
+                    "outlook.com",
+                    "aol.com",
+                    "icloud.com",
+                    "protonmail.com",
+                    "mail.com",
                 }:
                     return f"https://{domain}"
         return None
@@ -629,7 +633,7 @@ class EntityResearchAgent(BaseAgent):
         state: str,
         county: str,
     ) -> int | None:
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         formation_raw = sos_result.get("formation_date")
         formation_date: date | None = None
         if formation_raw:
@@ -672,9 +676,7 @@ class EntityResearchAgent(BaseAgent):
                 website=contacts.get("website"),
                 phone=contacts.get("phone"),
                 email=contacts.get("email"),
-                content_hash=hashlib.md5(
-                    str(sorted(sos_result.items())).encode()
-                ).hexdigest(),
+                content_hash=hashlib.md5(str(sorted(sos_result.items())).encode()).hexdigest(),
                 last_researched_at=now,
                 created_at=now,
             )

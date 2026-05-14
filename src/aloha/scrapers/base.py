@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import random
-import time
 import threading
+import time
 from abc import ABC, abstractmethod
 from typing import Any
 from urllib.parse import urlparse
@@ -42,9 +42,7 @@ class CircuitOpenError(Exception):
     def __init__(self, domain: str, retry_after: float) -> None:
         self.domain = domain
         self.retry_after = retry_after
-        super().__init__(
-            f"Circuit open for {domain!r} — retry after {retry_after:.1f}s"
-        )
+        super().__init__(f"Circuit open for {domain!r} — retry after {retry_after:.1f}s")
 
 
 class CircuitBreaker:
@@ -128,10 +126,7 @@ class CircuitBreaker:
                 self._half_open_calls = 0
                 return
 
-            if (
-                self._state == self._CLOSED
-                and self._failure_count >= self.failure_threshold
-            ):
+            if self._state == self._CLOSED and self._failure_count >= self.failure_threshold:
                 self._state = self._OPEN
                 self._opened_at = time.monotonic()
 

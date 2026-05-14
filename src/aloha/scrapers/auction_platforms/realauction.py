@@ -114,7 +114,9 @@ class RealAuctionScraper(BaseScraper):
             if len(records) >= max_records:
                 break
 
-        self.log.info("realauction_discovered", state=self.state, county=self.county, count=len(records))
+        self.log.info(
+            "realauction_discovered", state=self.state, county=self.county, count=len(records)
+        )
         return records[:max_records]
 
     def _parse_response(self, data: Any, auction_date: date) -> list[dict[str, Any]]:
@@ -132,9 +134,11 @@ class RealAuctionScraper(BaseScraper):
         if isinstance(data, str):
             # Try to extract JSON array from HTML
             import re
-            match = re.search(r'(\[\s*\{.*?\}\s*\])', data, re.DOTALL)
+
+            match = re.search(r"(\[\s*\{.*?\}\s*\])", data, re.DOTALL)
             if match:
                 import json
+
                 try:
                     return json.loads(match.group(1))
                 except Exception:
@@ -160,7 +164,9 @@ class RealAuctionScraper(BaseScraper):
         parcel_id = str(parcel_id).upper().strip()
 
         # Address
-        addr1 = str(raw.get("SITUSADDR1") or raw.get("address1") or raw.get("ADDRESS1") or "").strip()
+        addr1 = str(
+            raw.get("SITUSADDR1") or raw.get("address1") or raw.get("ADDRESS1") or ""
+        ).strip()
         addr2 = str(raw.get("SITUSADDR2") or raw.get("address2") or "").strip()
         address = f"{addr1} {addr2}".strip() or None
 
@@ -177,7 +183,11 @@ class RealAuctionScraper(BaseScraper):
         )
 
         portal_id = raw.get("AUCTIONID") or raw.get("id") or ""
-        auction_url = f"{self._portal_base}/index.cfm?zaction=AUCTION&zmethod=DETAILS&AID={portal_id}" if portal_id else None
+        auction_url = (
+            f"{self._portal_base}/index.cfm?zaction=AUCTION&zmethod=DETAILS&AID={portal_id}"
+            if portal_id
+            else None
+        )
 
         return {
             "parcel_id": parcel_id,
@@ -198,6 +208,7 @@ def _parse_date(value: Any) -> str | None:
         return None
     s = str(value).strip()
     from datetime import date as _date
+
     try:
         _date.fromisoformat(s[:10])
         return s[:10]

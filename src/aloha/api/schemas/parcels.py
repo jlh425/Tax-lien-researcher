@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # ── Shared config ─────────────────────────────────────────────────────────────
+
 
 class _Base(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
 # ── Lien ─────────────────────────────────────────────────────────────────────
+
 
 class TaxLienOut(_Base):
     id: int
@@ -43,6 +43,7 @@ class TaxLienOut(_Base):
 
 # ── Owner ─────────────────────────────────────────────────────────────────────
 
+
 class OwnerOut(_Base):
     id: int
     owner_of_record: str | None
@@ -61,6 +62,7 @@ class OwnerOut(_Base):
 
 
 # ── Score ─────────────────────────────────────────────────────────────────────
+
 
 class ScoreOut(_Base):
     id: int
@@ -91,10 +93,11 @@ class ScoreOut(_Base):
 
 # ── Property Image ────────────────────────────────────────────────────────────
 
+
 class PropertyImageOut(_Base):
     id: int
     image_type: str
-    file_path: str          # data URI or S3 URL
+    file_path: str  # data URI or S3 URL
     source_url: str | None
     width: int | None
     height: int | None
@@ -102,6 +105,7 @@ class PropertyImageOut(_Base):
 
 
 # ── Parcel (summary — card list) ──────────────────────────────────────────────
+
 
 class ParcelSummary(_Base):
     parcel_id: str
@@ -128,6 +132,7 @@ class ParcelSummary(_Base):
 
 
 # ── Parcel (detail — full pane) ───────────────────────────────────────────────
+
 
 class ParcelDetail(_Base):
     parcel_id: str
@@ -166,8 +171,10 @@ class ParcelDetail(_Base):
 
 # ── Search / Scan request ─────────────────────────────────────────────────────
 
+
 class ScanRequest(BaseModel):
     """Request body for POST /run — trigger a new discovery scan."""
+
     state: str = Field(..., min_length=2, max_length=2, description="Two-letter state code")
     county: str = Field(..., min_length=1, description="County name")
     instrument_filter: str | None = Field(
@@ -179,6 +186,7 @@ class ScanRequest(BaseModel):
 
 class ScanResponse(BaseModel):
     """Response from a scan trigger."""
+
     status: str
     state: str
     county: str
@@ -189,12 +197,14 @@ class ScanResponse(BaseModel):
 
 # ── Search request ────────────────────────────────────────────────────────────
 
+
 class ParcelSearchParams(BaseModel):
     """Query parameters for GET /parcels (search/filter)."""
+
     state: str | None = None
     county: str | None = None
-    instrument_type: str | None = None     # lien_certificate | tax_deed
-    status: str | None = None              # research pipeline status
+    instrument_type: str | None = None  # lien_certificate | tax_deed
+    status: str | None = None  # research pipeline status
     min_score: int | None = Field(None, ge=0, le=100)
     max_score: int | None = Field(None, ge=0, le=100)
     is_absentee: bool | None = None
@@ -204,8 +214,10 @@ class ParcelSearchParams(BaseModel):
 
 # ── Queue status ──────────────────────────────────────────────────────────────
 
+
 class QueueStatusOut(BaseModel):
     """Queue depth snapshot."""
+
     pending: int
     processing: int
     failed: int
@@ -214,6 +226,7 @@ class QueueStatusOut(BaseModel):
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
+
 
 class RegisterRequest(BaseModel):
     email: str

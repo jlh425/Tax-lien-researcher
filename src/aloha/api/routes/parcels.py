@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from aloha.api.deps import get_current_user, get_db
 from aloha.api.schemas.parcels import ParcelDetail, ParcelSummary
 from aloha.services.parcel_service import ParcelService
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/parcels", tags=["parcels"])
 

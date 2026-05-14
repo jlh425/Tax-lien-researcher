@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from sqlalchemy import ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -15,13 +16,9 @@ class UserPreferences(Base, TimestampMixin):
     """Persisted user preferences for scoring weights and external API keys."""
 
     __tablename__ = "user_preferences"
-    __table_args__ = (
-        UniqueConstraint("user_id", name="uq_user_preferences_user_id"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", name="uq_user_preferences_user_id"),)
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -30,14 +27,10 @@ class UserPreferences(Base, TimestampMixin):
     )
 
     # JSONB blob storing scoring weight sliders (e.g. lien_to_value, etc.)
-    scoring_weights: Mapped[dict] = mapped_column(
-        JSONB, nullable=False, default=dict
-    )
+    scoring_weights: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
 
     # JSONB blob storing user-provided API keys (e.g. google_maps)
-    api_keys: Mapped[dict] = mapped_column(
-        JSONB, nullable=False, default=dict
-    )
+    api_keys: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
 
     # ── Relationships ─────────────────────────────────────────────────────
     user: Mapped[User] = relationship(  # noqa: F821

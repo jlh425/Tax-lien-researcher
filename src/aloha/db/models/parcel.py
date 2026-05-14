@@ -61,26 +61,26 @@ class Parcel(Base, TimestampMixin):
     last_crawled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # ── Relationships ─────────────────────────────────────────────────────
-    user: Mapped["User"] = relationship("User", back_populates="parcels", lazy="raise")  # noqa: F821
-    tax_liens: Mapped[list["TaxLien"]] = relationship(  # noqa: F821
+    user: Mapped[User] = relationship("User", back_populates="parcels", lazy="raise")  # noqa: F821
+    tax_liens: Mapped[list[TaxLien]] = relationship(  # noqa: F821
         "TaxLien", back_populates="parcel", cascade="all, delete-orphan", lazy="raise"
     )
-    owners: Mapped[list["Owner"]] = relationship(  # noqa: F821
+    owners: Mapped[list[Owner]] = relationship(  # noqa: F821
         "Owner", back_populates="parcel", cascade="all, delete-orphan", lazy="raise"
     )
-    scores: Mapped[list["Score"]] = relationship(  # noqa: F821
+    scores: Mapped[list[Score]] = relationship(  # noqa: F821
         "Score", back_populates="parcel", cascade="all, delete-orphan", lazy="raise"
     )
-    property_images: Mapped[list["PropertyImage"]] = relationship(  # noqa: F821
+    property_images: Mapped[list[PropertyImage]] = relationship(  # noqa: F821
         "PropertyImage", back_populates="parcel", cascade="all, delete-orphan", lazy="raise"
     )
-    source_screenshots: Mapped[list["SourceScreenshot"]] = relationship(  # noqa: F821
+    source_screenshots: Mapped[list[SourceScreenshot]] = relationship(  # noqa: F821
         "SourceScreenshot", back_populates="parcel", cascade="all, delete-orphan", lazy="raise"
     )
-    alerts: Mapped[list["Alert"]] = relationship(  # noqa: F821
+    alerts: Mapped[list[Alert]] = relationship(  # noqa: F821
         "Alert", back_populates="parcel", cascade="all, delete-orphan", lazy="raise"
     )
-    document_chunks: Mapped[list["DocumentChunk"]] = relationship(  # noqa: F821
+    document_chunks: Mapped[list[DocumentChunk]] = relationship(  # noqa: F821
         "DocumentChunk", back_populates="parcel", cascade="all, delete-orphan", lazy="raise"
     )
 

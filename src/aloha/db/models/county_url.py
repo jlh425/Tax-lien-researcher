@@ -15,13 +15,9 @@ class CountyUrl(Base, TimestampMixin):
     """Persisted county assessor/tax-collector URLs for reliable resolution."""
 
     __tablename__ = "county_urls"
-    __table_args__ = (
-        UniqueConstraint("state", "county", "url_type", name="uq_county_url_type"),
-    )
+    __table_args__ = (UniqueConstraint("state", "county", "url_type", name="uq_county_url_type"),)
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     state: Mapped[str] = mapped_column(String(2), nullable=False, index=True)
     county: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     url_type: Mapped[str] = mapped_column(

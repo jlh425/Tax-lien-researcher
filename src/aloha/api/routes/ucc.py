@@ -28,6 +28,7 @@ def _get_server() -> UCCMCPServer:
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+
 @router.get("/filings", response_model=UCCSearchResponse)
 async def search_ucc_filings(
     debtor_name: str = Query(

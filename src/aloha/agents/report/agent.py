@@ -10,7 +10,7 @@ Responsibilities:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -18,7 +18,7 @@ import structlog
 from aloha.agents.base import BaseAgent
 from aloha.agents.report.prompts import REPORT_SYSTEM_PROMPT, build_report_task
 from aloha.db.engine import async_session_factory
-from aloha.db.repositories import ParcelRepository, QueueRepository, TaxLienRepository
+from aloha.db.repositories import ParcelRepository, TaxLienRepository
 from aloha.db.repositories.owner import OwnerRepository
 
 log = structlog.get_logger().bind(agent="report")
@@ -70,7 +70,7 @@ class ReportAgent(BaseAgent):
         self.log.info(
             "report_complete",
             parcel_id=parcel_id,
-            overall_score=report.get("score", {}).get("overall_score"),
+            overall_score=(report.get("score") or {}).get("overall_score"),
             recommended_action=report.get("recommended_action"),
         )
         return {
@@ -93,6 +93,7 @@ class ReportAgent(BaseAgent):
 
             # Latest score — load separately
             from sqlalchemy import select
+
             from aloha.db.models.score import Score
 
             score_result = await session.execute(
@@ -109,11 +110,13 @@ class ReportAgent(BaseAgent):
             chunk_repo = DocumentChunkRepository(session)
             chunks = await chunk_repo.get_by_parcel(parcel_id)
             vision_chunks = [c for c in chunks if c.source_type == "vision_analysis"]
-            condition_summary = _extract_condition_summary(vision_chunks[-1].content) if vision_chunks else None
+            condition_summary = (
+                _extract_condition_summary(vision_chunks[-1].content) if vision_chunks else None
+            )
 
         return {
             "parcel": _obj_to_dict(parcel),
-            "liens": [_obj_to_dict(l) for l in liens],
+            "liens": [_obj_to_dict(lien) for lien in liens],
             "owners": [_obj_to_dict(o) for o in owners],
             "score": _obj_to_dict(score),
             "property_condition": condition_summary,
@@ -121,9 +124,7 @@ class ReportAgent(BaseAgent):
 
     # ── Report compilation ────────────────────────────────────────────────
 
-    def _compile_report(
-        self, data: dict[str, Any], state: str, county: str
-    ) -> dict[str, Any]:
+    def _compile_report(self, data: dict[str, Any], state: str, county: str) -> dict[str, Any]:
         """Build structured report sections without LLM."""
         parcel = data["parcel"]
         liens = data["liens"]
@@ -150,7 +151,7 @@ class ReportAgent(BaseAgent):
 
         return {
             "parcel_id": parcel.get("parcel_id"),
-            "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+            "generated_at": datetime.now(tz=UTC).isoformat(),
             "instrument_type": instrument_type,
             "recommended_action": action,
             "property": {
@@ -199,9 +200,7 @@ class ReportAgent(BaseAgent):
             },
         }
 
-    async def _generate_narrative(
-        self, data: dict[str, Any], report: dict[str, Any]
-    ) -> str:
+    async def _generate_narrative(self, data: dict[str, Any], report: dict[str, Any]) -> str:
         """Use the LLM to produce a human-readable investment memo."""
         from pydantic_ai import Agent
 
@@ -231,9 +230,11 @@ agent = ReportAgent()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _extract_condition_summary(content: str) -> str:
     """Extract the human-readable summary from a vision analysis JSON blob."""
     import json
+
     try:
         summary = json.loads(content).get("summary", "")
         if summary:
@@ -289,8 +290,7 @@ def _fallback_narrative(data: dict[str, Any], report: dict[str, Any]) -> str:
             f"Score: {score.get('overall_score', 'N/A')}/100",
             f"Action: {str(action).replace('_', ' ').upper()}",
             "",
-            f"Owner: {owner.get('owner_of_record', 'N/A')}"
-            f" ({owner.get('owner_type', 'N/A')})",
+            f"Owner: {owner.get('owner_of_record', 'N/A')} ({owner.get('owner_type', 'N/A')})",
             f"Absentee: {owner.get('is_absentee', 'Unknown')}",
             "",
             amount_line,

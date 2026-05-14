@@ -69,7 +69,10 @@ class TylerEagleWebScraper:
         try:
             from playwright.async_api import async_playwright
         except ImportError:
-            self.log.error("playwright_not_installed", note="pip install playwright && playwright install chromium")
+            self.log.error(
+                "playwright_not_installed",
+                note="pip install playwright && playwright install chromium",
+            )
             return None
 
         async with async_playwright() as p:
@@ -101,7 +104,7 @@ class TylerEagleWebScraper:
                     'input[type="submit"]',
                     'button[type="submit"]',
                     'input[value*="Search"]',
-                    '#btnSearch',
+                    "#btnSearch",
                 ]:
                     try:
                         await page.click(btn_selector, timeout=2000)

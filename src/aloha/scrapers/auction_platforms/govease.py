@@ -105,7 +105,9 @@ class GovEaseScraper(BaseScraper):
             if normalised:
                 results.append(normalised)
 
-        self.log.info("govease_api_discovered", state=self.state, county=self.county, count=len(results))
+        self.log.info(
+            "govease_api_discovered", state=self.state, county=self.county, count=len(results)
+        )
         return results
 
     async def _playwright_scrape(self, max_records: int) -> list[dict[str, Any]]:
@@ -130,11 +132,11 @@ class GovEaseScraper(BaseScraper):
                 # GovEase auction cards — try multiple selector patterns
                 card_selectors = [
                     '[data-testid="auction-card"]',
-                    '.auction-listing',
-                    '.auction-card',
+                    ".auction-listing",
+                    ".auction-card",
                     '[class*="AuctionCard"]',
                     '[class*="listing-item"]',
-                    'article',
+                    "article",
                 ]
                 raw_items: list[dict[str, str]] = []
                 for selector in card_selectors:
@@ -162,7 +164,12 @@ class GovEaseScraper(BaseScraper):
             finally:
                 await browser.close()
 
-        self.log.info("govease_playwright_discovered", state=self.state, county=self.county, count=len(records))
+        self.log.info(
+            "govease_playwright_discovered",
+            state=self.state,
+            county=self.county,
+            count=len(records),
+        )
         return records
 
     def _normalise_govease(self, raw: dict[str, Any]) -> dict[str, Any] | None:
@@ -195,16 +202,14 @@ class GovEaseScraper(BaseScraper):
         )
 
         instrument = raw.get("sale_type") or raw.get("instrument_type") or "lien_certificate"
-        if "deed" in str(instrument).lower():
-            instrument = "tax_deed"
-        else:
-            instrument = "lien_certificate"
+        instrument = "tax_deed" if "deed" in str(instrument).lower() else "lien_certificate"
 
         return {
             "parcel_id": parcel_id,
             "state": self.state,
             "county": self.county,
-            "address": str(raw.get("address") or raw.get("property_address") or "").strip() or None,
+            "address": str(raw.get("address") or raw.get("property_address") or "").strip()
+            or None,
             "auction_date": auction_date,
             "opening_bid": opening_bid,
             "auction_platform": "govease",
@@ -216,22 +221,23 @@ class GovEaseScraper(BaseScraper):
     def _normalise_govease_text(self, text: str) -> dict[str, Any] | None:
         """Parse a GovEase auction card's inner text into canonical fields."""
         import re
+
         if not text:
             return None
 
         # Look for APN-like string: digits/dashes 6-20 chars
-        apn_match = re.search(r'\b([\dA-Z][\dA-Z\-\.\/]{5,19})\b', text, re.IGNORECASE)
+        apn_match = re.search(r"\b([\dA-Z][\dA-Z\-\.\/]{5,19})\b", text, re.IGNORECASE)
         if not apn_match:
             return None
 
         parcel_id = apn_match.group(1).upper().strip()
 
         # Look for dollar amount (opening bid)
-        bid_match = re.search(r'\$[\d,]+(?:\.\d{2})?', text)
+        bid_match = re.search(r"\$[\d,]+(?:\.\d{2})?", text)
         opening_bid = _to_float(bid_match.group(0)) if bid_match else None
 
         # Look for a date
-        date_match = re.search(r'\d{1,2}/\d{1,2}/\d{4}|\d{4}-\d{2}-\d{2}', text)
+        date_match = re.search(r"\d{1,2}/\d{1,2}/\d{4}|\d{4}-\d{2}-\d{2}", text)
         auction_date = _parse_date(date_match.group(0)) if date_match else None
 
         return {
@@ -253,6 +259,7 @@ def _parse_date(value: Any) -> str | None:
         return None
     s = str(value).strip()
     from datetime import date
+
     try:
         date.fromisoformat(s[:10])
         return s[:10]

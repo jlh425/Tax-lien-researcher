@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import base64
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -96,8 +96,8 @@ class EnrichmentAgent(BaseAgent):
 
         # ── Step 2: Trigger image capture ─────────────────────────────────
         # Deferred import to avoid circular dependency (server.py imports aloha.db)
-        from aloha.mcp_servers.image_capture.server import ImageCaptureMCPServer
         from aloha.config import settings
+        from aloha.mcp_servers.image_capture.server import ImageCaptureMCPServer
 
         image_server = ImageCaptureMCPServer(
             google_api_key=settings.google_maps_api_key,
@@ -180,7 +180,7 @@ class EnrichmentAgent(BaseAgent):
                 source_type="vision_analysis",
                 source_url=selected.source_url,
                 content=condition_text,
-                created_at=datetime.now(tz=timezone.utc),
+                created_at=datetime.now(tz=UTC),
             )
             await chunk_repo.add(chunk)  # flush assigns chunk.id
 
@@ -253,9 +253,7 @@ class EnrichmentAgent(BaseAgent):
         )
         return result.output
 
-    async def _geocode_address(
-        self, address: str
-    ) -> dict[str, float] | None:
+    async def _geocode_address(self, address: str) -> dict[str, float] | None:
         """Geocode an address via the GIS MCP server.
 
         Returns ``{"latitude": ..., "longitude": ...}`` on success, or
@@ -295,6 +293,7 @@ except Exception:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _pick_best_image(images: list[Any]) -> Any | None:
     """Return the image with the highest-priority type, or None."""

@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 import bcrypt
 from fastapi import HTTPException, status
 from jose import JWTError, jwt
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from aloha.api.schemas.parcels import TokenResponse
-from aloha.config import Settings
 from aloha.db.models.user import User
 from aloha.services.base import BaseService
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from aloha.config import Settings
 
 
 class AuthService(BaseService):
@@ -40,7 +44,7 @@ class AuthService(BaseService):
 
     def create_access_token(self, user_id: str, tier: str) -> str:
         """Create a signed JWT access token."""
-        expire = datetime.now(tz=timezone.utc) + timedelta(
+        expire = datetime.now(tz=UTC) + timedelta(
             minutes=self._settings.access_token_expire_minutes,
         )
         payload = {"sub": user_id, "tier": tier, "exp": expire}
@@ -84,7 +88,7 @@ class AuthService(BaseService):
             hashed_password=self.hash_password(password),
             tier="free",
             is_active=True,
-            created_at=datetime.now(tz=timezone.utc),
+            created_at=datetime.now(tz=UTC),
         )
         self._session.add(user)
         await self._session.flush()

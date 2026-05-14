@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import date
-from typing import Sequence
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from aloha.db.models.tax_lien import TaxLien
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class TaxLienRepository:

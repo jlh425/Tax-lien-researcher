@@ -22,28 +22,55 @@ log = structlog.get_logger().bind(agent="parcel_research")
 _ARCGIS_ENDPOINTS: dict[tuple[str, str], str] = {
     # Florida
     ("FL", "orange"): "https://maps.ocfl.net/arcgis/rest/services/Parcels/MapServer/0",
-    ("FL", "miami-dade"): "https://giswebservices.miamidade.gov/gis/rest/services/MDC_Parcels/MapServer/0",
-    ("FL", "broward"): "https://gisweb.broward.org/arcgis/rest/services/PropertyAppraiser/MapServer/0",
+    (
+        "FL",
+        "miami-dade",
+    ): "https://giswebservices.miamidade.gov/gis/rest/services/MDC_Parcels/MapServer/0",
+    (
+        "FL",
+        "broward",
+    ): "https://gisweb.broward.org/arcgis/rest/services/PropertyAppraiser/MapServer/0",
     ("FL", "duval"): "https://maps.coj.net/arcgis/rest/services/PropertyAppraiser/MapServer/0",
-    ("FL", "hillsborough"): "https://maps.hcpafl.org/arcgis/rest/services/MapServices/Parcel_Data/MapServer/0",
+    (
+        "FL",
+        "hillsborough",
+    ): "https://maps.hcpafl.org/arcgis/rest/services/MapServices/Parcel_Data/MapServer/0",
     # Texas
     ("TX", "harris"): "https://arcgis.hcad.org/arcgis/rest/services/Parcels/MapServer/0",
-    ("TX", "travis"): "https://services.arcgis.com/0L95CJ0VTaxqcmED/arcgis/rest/services/Travis_County_Parcels/FeatureServer/0",
+    (
+        "TX",
+        "travis",
+    ): "https://services.arcgis.com/0L95CJ0VTaxqcmED/arcgis/rest/services/Travis_County_Parcels/FeatureServer/0",
     ("TX", "bexar"): "https://maps.bcad.org/arcgis/rest/services/Parcels/MapServer/0",
     # California
-    ("CA", "los angeles"): "https://mapping.gis.lacounty.gov/hosting/rest/services/Assessor/Parcels/MapServer/0",
+    (
+        "CA",
+        "los angeles",
+    ): "https://mapping.gis.lacounty.gov/hosting/rest/services/Assessor/Parcels/MapServer/0",
     ("CA", "san diego"): "https://gis.sdarcc.gov/arcgis/rest/services/Parcels/MapServer/0",
     # Georgia
     ("GA", "fulton"): "https://gis.fultoncountyga.gov/arcgis/rest/services/Parcels/MapServer/0",
     ("GA", "gwinnett"): "https://maps.gwinnettcounty.com/arcgis/rest/services/Parcels/MapServer/0",
     # Arizona
-    ("AZ", "maricopa"): "https://maps.maricopa.gov/arcgis/rest/services/Assessor/Parcels/MapServer/0",
+    (
+        "AZ",
+        "maricopa",
+    ): "https://maps.maricopa.gov/arcgis/rest/services/Assessor/Parcels/MapServer/0",
     # Illinois
-    ("IL", "cook"): "https://gisapps.cookcountyil.gov/arcgis/rest/services/AssessorWarehouse/MapServer/0",
+    (
+        "IL",
+        "cook",
+    ): "https://gisapps.cookcountyil.gov/arcgis/rest/services/AssessorWarehouse/MapServer/0",
     # Colorado
-    ("CO", "denver"): "https://services1.arcgis.com/zdB7qR0BtYrg0Xpl/arcgis/rest/services/Parcels/FeatureServer/0",
+    (
+        "CO",
+        "denver",
+    ): "https://services1.arcgis.com/zdB7qR0BtYrg0Xpl/arcgis/rest/services/Parcels/FeatureServer/0",
     # Ohio
-    ("OH", "franklin"): "https://apps.franklincountyauditor.com/arcgis/rest/services/Parcels/MapServer/0",
+    (
+        "OH",
+        "franklin",
+    ): "https://apps.franklincountyauditor.com/arcgis/rest/services/Parcels/MapServer/0",
     ("OH", "cuyahoga"): "https://gis.cuyahogacounty.us/arcgis/rest/services/Parcels/MapServer/0",
 }
 
@@ -135,7 +162,9 @@ async def query_assessor_web(
         # If lookup_parcel failed and we have an address, try address search
         if address:
             addr_result = await server.search_by_address(
-                address, state, county,
+                address,
+                state,
+                county,
             )
             parcels = addr_result.get("parcels", [])
             if parcels:

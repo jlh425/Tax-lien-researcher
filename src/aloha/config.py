@@ -35,9 +35,9 @@ class Settings(BaseSettings):
 
     # ── LLM Provider ──────────────────────────────────────────────────────
     # Supported providers: anthropic, openai, ollama, groq, openai-compatible
-    llm_provider: Literal[
-        "anthropic", "openai", "ollama", "groq", "openai-compatible"
-    ] = "anthropic"
+    llm_provider: Literal["anthropic", "openai", "ollama", "groq", "openai-compatible"] = (
+        "anthropic"
+    )
     llm_model: str = "claude-sonnet-4-20250514"
 
     # Provider API keys (set the one matching your llm_provider)
@@ -85,13 +85,13 @@ class Settings(BaseSettings):
     searxng_url: str = "http://localhost:7900"
 
     # ── External Data APIs ────────────────────────────────────────────────
-    cobalt_intelligence_api_key: str | None = None    # SOS entity lookup (all 50 states)
-    courtlistener_api_key: str | None = None          # CourtListener REST API (free tier)
-    people_data_labs_api_key: str | None = None       # Contact enrichment
-    hunter_io_api_key: str | None = None              # Email verification
-    google_maps_api_key: str | None = None            # Street View / geocoding
-    mapbox_api_key: str | None = None                 # Mapbox Static Images API (free tier)
-    two_captcha_api_key: str | None = None            # 2captcha CAPTCHA solver
+    cobalt_intelligence_api_key: str | None = None  # SOS entity lookup (all 50 states)
+    courtlistener_api_key: str | None = None  # CourtListener REST API (free tier)
+    people_data_labs_api_key: str | None = None  # Contact enrichment
+    hunter_io_api_key: str | None = None  # Email verification
+    google_maps_api_key: str | None = None  # Street View / geocoding
+    mapbox_api_key: str | None = None  # Mapbox Static Images API (free tier)
+    two_captcha_api_key: str | None = None  # 2captcha CAPTCHA solver
 
     # ── Observability ─────────────────────────────────────────────────────
     sentry_dsn: str | None = None
@@ -117,10 +117,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _check_production_secret_key(self) -> Self:
-        if (
-            self.environment == "production"
-            and self.secret_key == "change-me-in-production"
-        ):
+        if self.environment == "production" and self.secret_key == "change-me-in-production":
             raise ValueError(
                 "SECRET_KEY must be explicitly set in production — "
                 "the default value is not allowed."

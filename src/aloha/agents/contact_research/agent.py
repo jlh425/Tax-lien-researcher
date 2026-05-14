@@ -16,8 +16,6 @@ import structlog
 
 from aloha.agents.base import BaseAgent
 from aloha.agents.contact_research.tools import (
-    normalise_email,
-    normalise_phone,
     pick_best_contact,
     score_contact_quality,
 )
@@ -109,7 +107,9 @@ class ContactResearchAgent(BaseAgent):
             verification = await self._verify_email(best_email)
             email_verified = verification.get("status") in ("valid", "deliverable")
             if not email_verified:
-                self.log.info("email_unverified", email=best_email, status=verification.get("status"))
+                self.log.info(
+                    "email_unverified", email=best_email, status=verification.get("status")
+                )
 
         # Step 4: Score contact quality
         quality = score_contact_quality(
@@ -150,9 +150,7 @@ class ContactResearchAgent(BaseAgent):
 
     # -- MCP server calls ------------------------------------------------------
 
-    async def _enrich_person(
-        self, name: str, location: str | None
-    ) -> dict[str, Any]:
+    async def _enrich_person(self, name: str, location: str | None) -> dict[str, Any]:
         """Call the people_data MCP server's enrich_person tool."""
         try:
             from aloha.mcp_servers.people_data.server import create_people_data_server

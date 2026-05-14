@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import uuid as _uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 import httpx
 import structlog
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from aloha.core.crypto import decrypt, encrypt
 from aloha.db.models.user import User
@@ -45,9 +44,7 @@ class ApiKeyService(BaseService):
         prefixes = _PROVIDER_PREFIXES.get(provider, [])
         if prefixes and not any(api_key.startswith(p) for p in prefixes):
             expected = " or ".join(f"'{p}'" for p in prefixes)
-            raise ValueError(
-                f"Invalid {provider} API key — expected prefix {expected}"
-            )
+            raise ValueError(f"Invalid {provider} API key — expected prefix {expected}")
 
         user = await self._get_user(user_id)
         settings = dict(user.settings)  # shallow copy to trigger SA dirty flag
@@ -130,9 +127,7 @@ class ApiKeyService(BaseService):
         settings["llm_provider"] = entry["provider"]
         settings["llm_model"] = entry["model"]
         if entry["provider"] == "ollama":
-            settings["ollama_base_url"] = entry.get(
-                "base_url", "http://localhost:11434"
-            )
+            settings["ollama_base_url"] = entry.get("base_url", "http://localhost:11434")
         else:
             settings.pop("ollama_base_url", None)
 
@@ -163,9 +158,11 @@ class ApiKeyService(BaseService):
                     available = [m["name"] for m in tags.get("models", [])]
                     # Ollama models can have :latest suffix
                     model_matches = [
-                        m for m in available
-                        if m == model or m.startswith(f"{model}:")
-                           or model.startswith(f"{m.split(':')[0]}:")
+                        m
+                        for m in available
+                        if m == model
+                        or m.startswith(f"{model}:")
+                        or model.startswith(f"{m.split(':')[0]}:")
                     ]
                     if not model_matches:
                         avail_str = ", ".join(available[:10]) or "(none)"
@@ -214,7 +211,7 @@ class ApiKeyService(BaseService):
             "id": str(_uuid.uuid4()),
             "provider": provider,
             "model": model,
-            "added_at": datetime.now(timezone.utc).isoformat(),
+            "added_at": datetime.now(UTC).isoformat(),
         }
         if provider == "ollama":
             entry["base_url"] = base_url or "http://localhost:11434"
@@ -305,13 +302,15 @@ class ApiKeyService(BaseService):
                 except Exception:
                     masked_key = "***invalid***"
 
-            result.append({
-                "id": entry["id"],
-                "provider": provider,
-                "model": entry["model"],
-                "base_url": entry.get("base_url"),
-                "masked_key": masked_key,
-                "is_active": entry["id"] == active_id,
-                "added_at": entry["added_at"],
-            })
+            result.append(
+                {
+                    "id": entry["id"],
+                    "provider": provider,
+                    "model": entry["model"],
+                    "base_url": entry.get("base_url"),
+                    "masked_key": masked_key,
+                    "is_active": entry["id"] == active_id,
+                    "added_at": entry["added_at"],
+                }
+            )
         return result

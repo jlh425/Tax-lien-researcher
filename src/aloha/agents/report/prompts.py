@@ -24,40 +24,45 @@ def build_report_task(data: dict[str, Any], report: dict[str, Any]) -> str:
     lien = data.get("liens", [{}])[0] if data.get("liens") else {}
     score_data = data.get("score", {})
 
+    beneficial = owner.get("beneficial_owner", "N/A")
+    ben_conf = owner.get("beneficial_owner_confidence", "N/A")
+    overall = score_data.get("overall_score", "N/A")
+    model_ver = score_data.get("score_model_version", "N/A")
+
     return f"""\
 Write an investment memo for the following property:
 
 PROPERTY
-- Parcel ID: {parcel.get('parcel_id', 'N/A')}
-- Address: {parcel.get('address', 'N/A')}
-- Type: {parcel.get('property_type', 'N/A')}
-- Zoning: {parcel.get('zoning', 'N/A')}
-- Acreage: {parcel.get('acreage', 'N/A')}
-- Year built: {parcel.get('year_built', 'N/A')}
-- Assessed value: ${parcel.get('assessed_total', 0):,}
-- Legal: {parcel.get('legal_description', 'N/A')}
+- Parcel ID: {parcel.get("parcel_id", "N/A")}
+- Address: {parcel.get("address", "N/A")}
+- Type: {parcel.get("property_type", "N/A")}
+- Zoning: {parcel.get("zoning", "N/A")}
+- Acreage: {parcel.get("acreage", "N/A")}
+- Year built: {parcel.get("year_built", "N/A")}
+- Assessed value: ${parcel.get("assessed_total", 0):,}
+- Legal: {parcel.get("legal_description", "N/A")}
 
 LIEN / DEED
-- Instrument: {lien.get('instrument_type', 'N/A')}
-- Status: {lien.get('lien_status', 'N/A')}
-- Tax year: {lien.get('tax_year', 'N/A')}
-- Total owed: ${lien.get('total_owed') or lien.get('principal_amount', 0):,.2f}
-- Cert rate: {lien.get('certificate_interest_rate', 'N/A')}
-- Redemption deadline: {lien.get('redemption_deadline', 'N/A')}
-- Auction date: {lien.get('auction_date', 'N/A')} via {lien.get('auction_platform', 'N/A')}
-- Opening bid: ${lien.get('opening_bid', 'N/A')}
+- Instrument: {lien.get("instrument_type", "N/A")}
+- Status: {lien.get("lien_status", "N/A")}
+- Tax year: {lien.get("tax_year", "N/A")}
+- Total owed: ${lien.get("total_owed") or lien.get("principal_amount", 0):,.2f}
+- Cert rate: {lien.get("certificate_interest_rate", "N/A")}
+- Redemption deadline: {lien.get("redemption_deadline", "N/A")}
+- Auction: {lien.get("auction_date", "N/A")} via {lien.get("auction_platform", "N/A")}
+- Opening bid: ${lien.get("opening_bid", "N/A")}
 
 OWNER
-- Owner of record: {owner.get('owner_of_record', 'N/A')}
-- Type: {owner.get('owner_type', 'N/A')}
-- Absentee: {owner.get('is_absentee', 'N/A')}
-- Beneficial owner: {owner.get('beneficial_owner', 'N/A')} ({owner.get('beneficial_owner_confidence', 'N/A')} confidence)
-- Mailing: {owner.get('mailing_address', 'N/A')}
+- Owner of record: {owner.get("owner_of_record", "N/A")}
+- Type: {owner.get("owner_type", "N/A")}
+- Absentee: {owner.get("is_absentee", "N/A")}
+- Beneficial owner: {beneficial} ({ben_conf} confidence)
+- Mailing: {owner.get("mailing_address", "N/A")}
 
 SCORE
-- Overall: {score_data.get('overall_score', 'N/A')}/100 ({score_data.get('score_model_version', 'N/A')})
-- Risk flags: {', '.join(score_data.get('risk_flags') or []) or 'None'}
-- Rationale: {score_data.get('score_rationale', 'N/A')}
+- Overall: {overall}/100 ({model_ver})
+- Risk flags: {", ".join(score_data.get("risk_flags") or []) or "None"}
+- Rationale: {score_data.get("score_rationale", "N/A")}
 
 Write the memo. End with a one-line recommended action:
 ACTION: [high_priority_buy | research_further | monitor | pass]

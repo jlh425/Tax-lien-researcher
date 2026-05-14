@@ -11,15 +11,15 @@ Responsibilities:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
 from sqlalchemy import select
 
 from aloha.agents.base import BaseAgent
-from aloha.agents.scoring.models import ScoringResult, score_lien_certificate, score_tax_deed
 from aloha.agents.discovery.state_registry import get_state_info
+from aloha.agents.scoring.models import ScoringResult, score_lien_certificate, score_tax_deed
 from aloha.db.engine import async_session_factory
 from aloha.db.models.owner import OwnerEntity
 from aloha.db.models.score import Score
@@ -72,13 +72,19 @@ class ScoringAgent(BaseAgent):
         if instrument_type == "tax_deed":
             post_sale_days = state_info.post_sale_redemption_days if state_info else 0
             result = score_tax_deed(
-                parcel_dict, lien_dict, owner_dict, post_sale_days,
+                parcel_dict,
+                lien_dict,
+                owner_dict,
+                post_sale_days,
                 entity_data=entity_dict,
             )
         else:
             cert_cap = state_info.cert_rate_cap if state_info else None
             result = score_lien_certificate(
-                parcel_dict, lien_dict, owner_dict, cert_cap,
+                parcel_dict,
+                lien_dict,
+                owner_dict,
+                cert_cap,
                 entity_data=entity_dict,
             )
 
@@ -133,9 +139,7 @@ class ScoringAgent(BaseAgent):
             entity_dict: dict[str, Any] | None = None
             if owner and owner.id:
                 stmt = (
-                    select(OwnerEntity.entity_id)
-                    .where(OwnerEntity.owner_id == owner.id)
-                    .limit(1)
+                    select(OwnerEntity.entity_id).where(OwnerEntity.owner_id == owner.id).limit(1)
                 )
                 row = (await session.execute(stmt)).scalar_one_or_none()
                 if row:
@@ -153,7 +157,7 @@ class ScoringAgent(BaseAgent):
         state: str,
         county: str,
     ) -> int | None:
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
 
         async with async_session_factory() as session:
             parcel_repo = ParcelRepository(session)
@@ -217,6 +221,7 @@ agent = ScoringAgent()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _model_to_dict(obj: Any) -> dict[str, Any]:
     """Convert a SQLAlchemy model instance to a plain dict."""
     if obj is None:
@@ -231,8 +236,8 @@ def _pick_best_lien(liens: Any) -> Any:
     """Return the most relevant lien: prefer active with latest tax_year."""
     if not liens:
         return None
-    active = [l for l in liens if getattr(l, "lien_status", "") == "active"]
+    active = [lien for lien in liens if getattr(lien, "lien_status", "") == "active"]
     pool = active if active else list(liens)
     # Sort by tax_year descending, None last
-    pool.sort(key=lambda l: getattr(l, "tax_year", None) or 0, reverse=True)
+    pool.sort(key=lambda lien: getattr(lien, "tax_year", None) or 0, reverse=True)
     return pool[0]

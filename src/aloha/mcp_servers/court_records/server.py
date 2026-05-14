@@ -45,80 +45,86 @@ class CourtRecordsMCPServer(BaseMCPServer):
         self._register_tools()
 
     def _register_tools(self) -> None:
-        self.register_tool(ToolDefinition(
-            name="search_federal_cases",
-            description=(
-                "Search federal court cases by party name, state, and case type "
-                "using CourtListener RECAP docket data. "
-                "Returns matching cases with basic filing information."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "party_name": {
-                        "type": "string",
-                        "description": "Name of a party (plaintiff or defendant).",
+        self.register_tool(
+            ToolDefinition(
+                name="search_federal_cases",
+                description=(
+                    "Search federal court cases by party name, state, and case type "
+                    "using CourtListener RECAP docket data. "
+                    "Returns matching cases with basic filing information."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "party_name": {
+                            "type": "string",
+                            "description": "Name of a party (plaintiff or defendant).",
+                        },
+                        "state": {
+                            "type": "string",
+                            "description": "Two-letter US state abbreviation to narrow search.",
+                        },
+                        "case_type": {
+                            "type": "string",
+                            "description": "Optional filter: 'civil', 'bankruptcy', 'criminal'.",
+                        },
                     },
-                    "state": {
-                        "type": "string",
-                        "description": "Two-letter US state abbreviation to narrow search.",
-                    },
-                    "case_type": {
-                        "type": "string",
-                        "description": "Optional filter: 'civil', 'bankruptcy', 'criminal'.",
-                    },
+                    "required": ["party_name"],
                 },
-                "required": ["party_name"],
-            },
-            handler=self.search_federal_cases,
-        ))
+                handler=self.search_federal_cases,
+            )
+        )
 
-        self.register_tool(ToolDefinition(
-            name="search_state_liens",
-            description=(
-                "Search state-level lien filings (tax liens, judgment liens, "
-                "mechanic's liens) by debtor name and state. Uses CourtListener "
-                "filtered search with state scraper fallback."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "debtor_name": {
-                        "type": "string",
-                        "description": "Name of the debtor to search for.",
+        self.register_tool(
+            ToolDefinition(
+                name="search_state_liens",
+                description=(
+                    "Search state-level lien filings (tax liens, judgment liens, "
+                    "mechanic's liens) by debtor name and state. Uses CourtListener "
+                    "filtered search with state scraper fallback."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "debtor_name": {
+                            "type": "string",
+                            "description": "Name of the debtor to search for.",
+                        },
+                        "state": {
+                            "type": "string",
+                            "description": "Two-letter US state abbreviation.",
+                        },
+                        "lien_type": {
+                            "type": "string",
+                            "description": "Optional filter: 'tax', 'judgment', 'mechanics'.",
+                        },
                     },
-                    "state": {
-                        "type": "string",
-                        "description": "Two-letter US state abbreviation.",
-                    },
-                    "lien_type": {
-                        "type": "string",
-                        "description": "Optional filter: 'tax', 'judgment', 'mechanics'.",
-                    },
+                    "required": ["debtor_name", "state"],
                 },
-                "required": ["debtor_name", "state"],
-            },
-            handler=self.search_state_liens,
-        ))
+                handler=self.search_state_liens,
+            )
+        )
 
-        self.register_tool(ToolDefinition(
-            name="get_case_details",
-            description=(
-                "Fetch full case details by docket ID from CourtListener. "
-                "Returns parties, docket entries, filing dates, and case status."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "case_id": {
-                        "type": "string",
-                        "description": "CourtListener docket ID from a prior search.",
+        self.register_tool(
+            ToolDefinition(
+                name="get_case_details",
+                description=(
+                    "Fetch full case details by docket ID from CourtListener. "
+                    "Returns parties, docket entries, filing dates, and case status."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "case_id": {
+                            "type": "string",
+                            "description": "CourtListener docket ID from a prior search.",
+                        },
                     },
+                    "required": ["case_id"],
                 },
-                "required": ["case_id"],
-            },
-            handler=self.get_case_details,
-        ))
+                handler=self.get_case_details,
+            )
+        )
 
     # ── Tool handlers ─────────────────────────────────────────────────────
 
@@ -244,24 +250,25 @@ class CourtRecordsMCPServer(BaseMCPServer):
 
 # ── Normalisation helpers ─────────────────────────────────────────────────────
 
+
 def _normalise_case(raw: dict[str, Any]) -> dict[str, Any]:
     """Map a CourtListener docket/search result to canonical fields."""
     # CourtListener search results use caseName; detail uses case_name
     parties_raw = raw.get("parties", [])
-    parties = [
-        {
-            "name": p.get("name") or p.get("party_name"),
-            "role": p.get("role") or p.get("party_type"),
-        }
-        for p in parties_raw
-    ] if isinstance(parties_raw, list) else []
+    parties = (
+        [
+            {
+                "name": p.get("name") or p.get("party_name"),
+                "role": p.get("role") or p.get("party_type"),
+            }
+            for p in parties_raw
+        ]
+        if isinstance(parties_raw, list)
+        else []
+    )
 
     return {
-        "case_id": str(
-            raw.get("docket_id")
-            or raw.get("id")
-            or raw.get("case_id")
-        ),
+        "case_id": str(raw.get("docket_id") or raw.get("id") or raw.get("case_id")),
         "case_title": (
             raw.get("caseName")
             or raw.get("case_name")
@@ -301,6 +308,7 @@ def _normalise_lien(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 # ── Factory ───────────────────────────────────────────────────────────────────
+
 
 def create_court_records_server() -> CourtRecordsMCPServer:
     """Build the Court Records MCP server from settings.

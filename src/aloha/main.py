@@ -2,12 +2,11 @@
 
 import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
-
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager, suppress
 
 import structlog
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from aloha import __version__
 from aloha.api.routes.auth import router as auth_router
@@ -30,8 +29,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     log.info("aloha_starting", version=__version__, env=settings.environment)
 
     # Start queue worker in the background
-    from aloha.agents.orchestrator.agent import agent as orchestrator
     from aloha.agents.database.agent import agent as db_agent
+    from aloha.agents.orchestrator.agent import agent as orchestrator
 
     worker_task = asyncio.create_task(orchestrator.run_forever())
     db_agent.start_scheduler()
@@ -42,10 +41,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     orchestrator.stop()
     db_agent.stop_scheduler()
     worker_task.cancel()
-    try:
+    with suppress(TimeoutError, asyncio.CancelledError):
         await asyncio.wait_for(worker_task, timeout=10.0)
-    except (asyncio.CancelledError, asyncio.TimeoutError):
-        pass
     log.info("aloha_shutdown")
 
 
@@ -62,8 +59,7 @@ def create_app() -> FastAPI:
     application.add_middleware(
         CORSMiddleware,
         allow_origins=(
-            ["*"] if settings.environment == "development"
-            else settings.cors_allowed_origins
+            ["*"] if settings.environment == "development" else settings.cors_allowed_origins
         ),
         allow_credentials=True,
         allow_methods=["*"],

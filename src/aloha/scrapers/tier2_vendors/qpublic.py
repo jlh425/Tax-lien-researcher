@@ -158,6 +158,7 @@ def _normalise_qpublic_api(data: dict[str, Any], source_url: str = "") -> dict[s
     """Map a qPublic JSON API response to canonical parcel fields."""
     if not data:
         return None
+
     # qPublic API varies by county; try common field names
     def pick(*keys: str) -> Any:
         for k in keys:
@@ -187,6 +188,7 @@ def _normalise_qpublic_api(data: dict[str, Any], source_url: str = "") -> dict[s
 
 def _normalise_qpublic_html(raw: dict[str, str], source_url: str = "") -> dict[str, Any]:
     """Map scraped HTML label/value pairs to canonical parcel fields."""
+
     def pick(*keys: str) -> str | None:
         for k in keys:
             v = raw.get(k.upper())
@@ -230,17 +232,35 @@ def _to_float(val: Any) -> float | None:
 
 QPUBLIC_ENDPOINTS: dict[tuple[str, str], dict[str, str]] = {
     # Georgia
-    ("GA", "dekalb"): {"base_url": "https://qpublic.schneidercorp.com", "county_code": "GA_DeKalb"},
+    ("GA", "dekalb"): {
+        "base_url": "https://qpublic.schneidercorp.com",
+        "county_code": "GA_DeKalb",
+    },
     ("GA", "cobb"): {"base_url": "https://qpublic.schneidercorp.com", "county_code": "GA_Cobb"},
     ("GA", "henry"): {"base_url": "https://qpublic.schneidercorp.com", "county_code": "GA_Henry"},
-    ("GA", "paulding"): {"base_url": "https://qpublic.schneidercorp.com", "county_code": "GA_Paulding"},
+    ("GA", "paulding"): {
+        "base_url": "https://qpublic.schneidercorp.com",
+        "county_code": "GA_Paulding",
+    },
     # Florida
-    ("FL", "alachua"): {"base_url": "https://qpublic.schneidercorp.com", "county_code": "FL_Alachua"},
+    ("FL", "alachua"): {
+        "base_url": "https://qpublic.schneidercorp.com",
+        "county_code": "FL_Alachua",
+    },
     ("FL", "clay"): {"base_url": "https://qpublic.schneidercorp.com", "county_code": "FL_Clay"},
-    ("FL", "nassau"): {"base_url": "https://qpublic.schneidercorp.com", "county_code": "FL_Nassau"},
+    ("FL", "nassau"): {
+        "base_url": "https://qpublic.schneidercorp.com",
+        "county_code": "FL_Nassau",
+    },
     # Louisiana
-    ("LA", "east baton rouge"): {"base_url": "https://qpublic.schneidercorp.com", "county_code": "LA_EastBatonRouge"},
-    ("LA", "jefferson"): {"base_url": "https://qpublic.schneidercorp.com", "county_code": "LA_Jefferson"},
+    ("LA", "east baton rouge"): {
+        "base_url": "https://qpublic.schneidercorp.com",
+        "county_code": "LA_EastBatonRouge",
+    },
+    ("LA", "jefferson"): {
+        "base_url": "https://qpublic.schneidercorp.com",
+        "county_code": "LA_Jefferson",
+    },
 }
 
 

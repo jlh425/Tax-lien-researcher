@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import stripe
 import structlog
@@ -46,7 +46,7 @@ class BillingService(BaseService):
         if scans_limit is None:
             return {"used": 0, "limit": None, "remaining": None}
 
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
         result = await self._session.execute(
@@ -177,7 +177,9 @@ class BillingService(BaseService):
 
         try:
             event = stripe.Webhook.construct_event(
-                payload, sig_header, settings.stripe_webhook_secret,
+                payload,
+                sig_header,
+                settings.stripe_webhook_secret,
             )
         except (ValueError, stripe.SignatureVerificationError) as exc:
             self.log.warning("stripe_webhook_invalid", error=str(exc))

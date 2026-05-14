@@ -23,7 +23,7 @@ from aloha.agents.outreach.tools import (
     should_skip_outreach,
 )
 from aloha.db.engine import async_session_factory
-from aloha.db.repositories import OwnerRepository, ParcelRepository, QueueRepository
+from aloha.db.repositories import OwnerRepository, ParcelRepository
 
 log = structlog.get_logger().bind(agent="outreach")
 

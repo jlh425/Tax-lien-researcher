@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import base64
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import httpx
 from jinja2 import Environment
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from aloha.core.exceptions import OutreachBlockedError
 from aloha.db.models.outreach import DoNotContact, OutreachLog, OutreachTemplate
@@ -45,7 +44,7 @@ class OutreachService(BaseService):
         channel: str,
     ) -> bool:
         """Return True if the owner was already contacted within the cap window."""
-        cutoff = datetime.now(tz=timezone.utc) - timedelta(days=_FREQUENCY_CAP_DAYS)
+        cutoff = datetime.now(tz=UTC) - timedelta(days=_FREQUENCY_CAP_DAYS)
         result = await self._session.execute(
             select(func.count())
             .select_from(OutreachLog)
@@ -108,7 +107,7 @@ class OutreachService(BaseService):
             subject=subject,
             message_body=message_body,
             status="pending",
-            created_at=datetime.now(tz=timezone.utc),
+            created_at=datetime.now(tz=UTC),
         )
         self._session.add(log_entry)
         await self._session.flush()
@@ -127,7 +126,7 @@ class OutreachService(BaseService):
         if entry is None:
             raise ValueError(f"OutreachLog {outreach_log_id} not found")
         entry.status = "approved"
-        entry.approved_at = datetime.now(tz=timezone.utc)
+        entry.approved_at = datetime.now(tz=UTC)
         await self._session.flush()
         self.log.info("outreach_approved", outreach_id=outreach_log_id)
 
@@ -141,7 +140,9 @@ class OutreachService(BaseService):
         if entry is None:
             raise ValueError(f"OutreachLog {outreach_log_id} not found")
         if entry.status != "approved":
-            raise ValueError(f"OutreachLog {outreach_log_id} is not approved (status={entry.status})")
+            raise ValueError(
+                f"OutreachLog {outreach_log_id} is not approved (status={entry.status})"
+            )
 
         from aloha.config import settings
 
@@ -167,7 +168,7 @@ class OutreachService(BaseService):
             entry.provider = "stub"
 
         entry.status = "sent"
-        entry.sent_at = datetime.now(tz=timezone.utc)
+        entry.sent_at = datetime.now(tz=UTC)
         entry.provider_msg_id = provider_msg_id
         await self._session.flush()
 

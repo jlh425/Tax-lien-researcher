@@ -32,8 +32,7 @@ log = structlog.get_logger().bind(scraper="natrona_county")
 
 # The county's delinquent tax list PDF URL.
 DELINQUENT_LIST_URL = (
-    "https://www.natronacounty-wy.gov/DocumentCenter/View/12592/"
-    "Delinquent-List-2025"
+    "https://www.natronacounty-wy.gov/DocumentCenter/View/12592/Delinquent-List-2025"
 )
 
 # Canonical field names for the pipeline (matches Socrata normalisation).
@@ -157,9 +156,7 @@ def _ocr_pdf(pdf_bytes: bytes) -> str:
 # ── Table parsing ─────────────────────────────────────────────────────────────
 
 
-def _parse_delinquent_list(
-    text: str, *, max_records: int = 5000
-) -> list[dict[str, Any]]:
+def _parse_delinquent_list(text: str, *, max_records: int = 5000) -> list[dict[str, Any]]:
     """Parse the extracted text into normalised records.
 
     The Natrona County delinquent list is a columnar table.  We detect the
@@ -220,7 +217,7 @@ def _parse_line(line: str) -> dict[str, Any] | None:
 
     # Extract the owner name: text between parcel ID and first dollar amount
     # or year.  This is heuristic.
-    after_parcel = line[parcel_match.end():].strip()
+    after_parcel = line[parcel_match.end() :].strip()
     # Try to get the text before numeric content
     owner_match = re.match(r"^([A-Za-z\s,.&']+?)(?=\s+\d|\s*$)", after_parcel)
     owner: str | None = owner_match.group(1).strip() if owner_match else None

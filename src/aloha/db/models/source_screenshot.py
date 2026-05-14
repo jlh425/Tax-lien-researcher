@@ -18,9 +18,7 @@ class SourceScreenshot(Base):
     """
 
     __tablename__ = "source_screenshots"
-    __table_args__ = (
-        Index("idx_screenshots_parcel", "parcel_id"),
-    )
+    __table_args__ = (Index("idx_screenshots_parcel", "parcel_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     parcel_id: Mapped[str] = mapped_column(
@@ -44,12 +42,11 @@ class SourceScreenshot(Base):
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # ── Relationships ─────────────────────────────────────────────────────
-    parcel: Mapped["Parcel"] = relationship(  # noqa: F821
+    parcel: Mapped[Parcel] = relationship(  # noqa: F821
         "Parcel", back_populates="source_screenshots", lazy="raise"
     )
 
     def __repr__(self) -> str:
         return (
-            f"<SourceScreenshot id={self.id} parcel={self.parcel_id!r} "
-            f"type={self.source_type!r}>"
+            f"<SourceScreenshot id={self.id} parcel={self.parcel_id!r} type={self.source_type!r}>"
         )

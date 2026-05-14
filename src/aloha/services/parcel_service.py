@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import TYPE_CHECKING
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -17,12 +18,13 @@ from aloha.api.schemas.parcels import (
     TaxLienOut,
 )
 from aloha.db.models.document_chunk import DocumentChunk
-from aloha.db.models.owner import Owner
 from aloha.db.models.parcel import Parcel
-from aloha.db.models.property_image import PropertyImage
-from aloha.db.models.score import Score
-from aloha.db.models.tax_lien import TaxLien
 from aloha.services.base import BaseService
+
+if TYPE_CHECKING:
+    from aloha.db.models.owner import Owner
+    from aloha.db.models.score import Score
+    from aloha.db.models.tax_lien import TaxLien
 
 
 class ParcelService(BaseService):
@@ -43,13 +45,10 @@ class ParcelService(BaseService):
         offset: int = 0,
     ) -> list[ParcelSummary]:
         """List parcels with optional filtering using eager loading (no N+1)."""
-        stmt = (
-            select(Parcel)
-            .options(
-                selectinload(Parcel.tax_liens),
-                selectinload(Parcel.owners),
-                selectinload(Parcel.scores),
-            )
+        stmt = select(Parcel).options(
+            selectinload(Parcel.tax_liens),
+            selectinload(Parcel.owners),
+            selectinload(Parcel.scores),
         )
 
         if state:
@@ -59,9 +58,13 @@ class ParcelService(BaseService):
         if research_status:
             stmt = stmt.where(Parcel.research_status == research_status)
 
-        stmt = stmt.order_by(
-            Parcel.last_crawled_at.desc().nullslast(),
-        ).offset(offset).limit(limit)
+        stmt = (
+            stmt.order_by(
+                Parcel.last_crawled_at.desc().nullslast(),
+            )
+            .offset(offset)
+            .limit(limit)
+        )
 
         result = await self._session.execute(stmt)
         parcels = result.scalars().unique().all()
@@ -71,7 +74,7 @@ class ParcelService(BaseService):
             # Latest lien (by tax_year descending)
             liens = sorted(
                 parcel.tax_liens,
-                key=lambda l: l.tax_year or 0,
+                key=lambda lien: lien.tax_year or 0,
                 reverse=True,
             )
             lien = liens[0] if liens else None
@@ -140,7 +143,7 @@ class ParcelService(BaseService):
             raise HTTPException(status_code=404, detail=f"Parcel {parcel_id!r} not found")
 
         # Sort relations
-        liens = sorted(parcel.tax_liens, key=lambda l: l.tax_year or 0, reverse=True)
+        liens = sorted(parcel.tax_liens, key=lambda lien: lien.tax_year or 0, reverse=True)
         scores = sorted(parcel.scores, key=lambda s: s.scored_at, reverse=True)
 
         # Load vision analysis condition summary
@@ -156,9 +159,7 @@ class ParcelService(BaseService):
         chunk_result = await self._session.execute(chunk_stmt)
         vision_chunk = chunk_result.scalars().first()
         condition_summary = (
-            self._extract_condition_summary(vision_chunk.content)
-            if vision_chunk
-            else None
+            self._extract_condition_summary(vision_chunk.content) if vision_chunk else None
         )
 
         return ParcelDetail(
@@ -188,7 +189,7 @@ class ParcelService(BaseService):
             last_crawled_at=parcel.last_crawled_at,
             created_at=parcel.created_at,
             updated_at=parcel.updated_at,
-            tax_liens=[self._to_lien_out(l) for l in liens],
+            tax_liens=[self._to_lien_out(item) for item in liens],
             owners=[self._to_owner_out(o) for o in parcel.owners],
             scores=[self._to_score_out(s) for s in scores],
             images=[PropertyImageOut.model_validate(img) for img in parcel.property_images],
@@ -224,9 +225,7 @@ class ParcelService(BaseService):
             redemption_deadline=lien.redemption_deadline,
             certificate_number=lien.certificate_number,
             certificate_interest_rate=(
-                float(lien.certificate_interest_rate)
-                if lien.certificate_interest_rate
-                else None
+                float(lien.certificate_interest_rate) if lien.certificate_interest_rate else None
             ),
             auction_date=lien.auction_date,
             auction_platform=lien.auction_platform,

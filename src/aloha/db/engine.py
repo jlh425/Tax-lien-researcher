@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -12,6 +12,9 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from aloha.config import settings
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 engine: AsyncEngine = create_async_engine(
     settings.database_url,

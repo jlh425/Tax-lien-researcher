@@ -17,13 +17,14 @@ class PropertyImage(Base):
     """
 
     __tablename__ = "property_images"
-    __table_args__ = (
-        UniqueConstraint("parcel_id", "image_type", name="uq_parcel_image_type"),
-    )
+    __table_args__ = (UniqueConstraint("parcel_id", "image_type", name="uq_parcel_image_type"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     parcel_id: Mapped[str] = mapped_column(
-        String(100), ForeignKey("parcels.parcel_id", ondelete="CASCADE"), nullable=False, index=True
+        String(100),
+        ForeignKey("parcels.parcel_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     image_type: Mapped[str] = mapped_column(String(30), nullable=False)
     # gis_parcel_map|street_view|satellite|zillow_listing
@@ -36,7 +37,7 @@ class PropertyImage(Base):
     overlays: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
 
     # ── Relationships ─────────────────────────────────────────────────────
-    parcel: Mapped["Parcel"] = relationship(  # noqa: F821
+    parcel: Mapped[Parcel] = relationship(  # noqa: F821
         "Parcel", back_populates="property_images", lazy="raise"
     )
 

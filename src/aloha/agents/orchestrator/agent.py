@@ -54,7 +54,7 @@ class OrchestratorAgent(BaseAgent):
 
     async def run(self, context: dict[str, Any]) -> dict[str, Any]:
         """Process a single queue item (used in tests / one-shot mode)."""
-        item_id: int = context["item_id"]
+        context["item_id"]
         agent_name: str = context["agent_name"]
         payload: dict[str, Any] = context["payload"]
 
@@ -158,15 +158,15 @@ class OrchestratorAgent(BaseAgent):
 
     def _build_dispatch_map(self) -> None:
         """Lazily import and cache agent singletons."""
-        from aloha.agents.discovery.agent import agent as discovery_agent
-        from aloha.agents.parcel_research.agent import agent as parcel_agent
-        from aloha.agents.owner_research.agent import agent as owner_agent
-        from aloha.agents.entity_research.agent import agent as entity_agent
         from aloha.agents.contact_research.agent import agent as contact_agent
+        from aloha.agents.discovery.agent import agent as discovery_agent
         from aloha.agents.enrichment.agent import agent as enrichment_agent
-        from aloha.agents.scoring.agent import agent as scoring_agent
-        from aloha.agents.report.agent import agent as report_agent
+        from aloha.agents.entity_research.agent import agent as entity_agent
         from aloha.agents.outreach.agent import agent as outreach_agent
+        from aloha.agents.owner_research.agent import agent as owner_agent
+        from aloha.agents.parcel_research.agent import agent as parcel_agent
+        from aloha.agents.report.agent import agent as report_agent
+        from aloha.agents.scoring.agent import agent as scoring_agent
         from aloha.agents.zoning.agent import agent as zoning_agent
 
         self._dispatch_map = {

@@ -19,9 +19,7 @@ depends_on = None
 def upgrade() -> None:
     op.create_table(
         "user_preferences",
-        sa.Column(
-            "id", postgresql.UUID(as_uuid=True), primary_key=True
-        ),
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column(
             "user_id",
             postgresql.UUID(as_uuid=True),

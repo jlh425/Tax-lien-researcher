@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Any, Sequence
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select, text, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from aloha.db.models.queue_item import QueueItem
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 # ── SQL for atomic SKIP LOCKED claim ──────────────────────────────────────────
 # Two variants: asyncpg cannot infer type for NULL parameters used in both
@@ -68,7 +72,7 @@ class QueueRepository:
         priority: int = 5,
     ) -> QueueItem:
         """Add a new job to the queue."""
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         item = QueueItem(
             parcel_id=parcel_id,
             agent_name=agent_name,
@@ -114,8 +118,8 @@ class QueueRepository:
             .values(
                 status="complete",
                 result=_sanitize_for_json(result),
-                completed_at=datetime.now(tz=timezone.utc),
-                updated_at=datetime.now(tz=timezone.utc),
+                completed_at=datetime.now(tz=UTC),
+                updated_at=datetime.now(tz=UTC),
             )
         )
 
@@ -139,7 +143,7 @@ class QueueRepository:
         else:
             new_status = "retry"
             backoff = retry_after_seconds * (2 ** (new_attempts - 1))
-            next_retry = datetime.now(tz=timezone.utc) + timedelta(seconds=backoff)
+            next_retry = datetime.now(tz=UTC) + timedelta(seconds=backoff)
 
         await self._session.execute(
             update(QueueItem)
@@ -149,7 +153,7 @@ class QueueRepository:
                 attempts=new_attempts,
                 last_error=error,
                 next_retry_at=next_retry,
-                updated_at=datetime.now(tz=timezone.utc),
+                updated_at=datetime.now(tz=UTC),
             )
         )
 
@@ -157,8 +161,10 @@ class QueueRepository:
         """Count pending + retry items, optionally filtered by agent."""
         from sqlalchemy import func
 
-        stmt = select(func.count()).select_from(QueueItem).where(
-            QueueItem.status.in_(["pending", "retry"])
+        stmt = (
+            select(func.count())
+            .select_from(QueueItem)
+            .where(QueueItem.status.in_(["pending", "retry"]))
         )
         if agent_name:
             stmt = stmt.where(QueueItem.agent_name == agent_name)
@@ -167,7 +173,7 @@ class QueueRepository:
 
     async def get_stalled(self, stalled_after_minutes: int = 60) -> Sequence[QueueItem]:
         """Return processing items that haven't moved in ``stalled_after_minutes``."""
-        cutoff = datetime.now(tz=timezone.utc) - timedelta(minutes=stalled_after_minutes)
+        cutoff = datetime.now(tz=UTC) - timedelta(minutes=stalled_after_minutes)
         stmt = select(QueueItem).where(
             QueueItem.status == "processing",
             QueueItem.claimed_at < cutoff,
@@ -177,7 +183,7 @@ class QueueRepository:
 
     async def reset_stalled(self, stalled_after_minutes: int = 60) -> int:
         """Reset stalled processing items back to 'pending' for retry."""
-        cutoff = datetime.now(tz=timezone.utc) - timedelta(minutes=stalled_after_minutes)
+        cutoff = datetime.now(tz=UTC) - timedelta(minutes=stalled_after_minutes)
         result = await self._session.execute(
             update(QueueItem)
             .where(
@@ -188,10 +194,10 @@ class QueueRepository:
                 status="pending",
                 claimed_by=None,
                 claimed_at=None,
-                updated_at=datetime.now(tz=timezone.utc),
+                updated_at=datetime.now(tz=UTC),
             )
         )
-        return result.rowcount
+        return result.rowcount or 0
 
 
 def _sanitize_for_json(obj: Any) -> Any:

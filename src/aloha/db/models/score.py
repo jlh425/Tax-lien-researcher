@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import ARRAY, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
@@ -22,7 +23,10 @@ class Score(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     parcel_id: Mapped[str] = mapped_column(
-        String(100), ForeignKey("parcels.parcel_id", ondelete="CASCADE"), nullable=False, index=True
+        String(100),
+        ForeignKey("parcels.parcel_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     instrument_type: Mapped[str] = mapped_column(String(30), nullable=False)
     # lien_certificate | tax_deed
@@ -39,27 +43,27 @@ class Score(Base):
     lien_to_value_ratio: Mapped[float | None] = mapped_column(Numeric(8, 4))
     certificate_rate: Mapped[float | None] = mapped_column(Numeric(6, 4))
     years_delinquent: Mapped[int | None] = mapped_column(Integer)
-    owner_motivation: Mapped[int | None] = mapped_column(Integer)       # 0-10
-    contact_reachability: Mapped[int | None] = mapped_column(Integer)   # 0-10
-    redemption_urgency: Mapped[int | None] = mapped_column(Integer)     # 0-10
+    owner_motivation: Mapped[int | None] = mapped_column(Integer)  # 0-10
+    contact_reachability: Mapped[int | None] = mapped_column(Integer)  # 0-10
+    redemption_urgency: Mapped[int | None] = mapped_column(Integer)  # 0-10
 
     # ── Tax Deed factors (null for lien certificate records) ──────────────
     arv_estimate: Mapped[float | None] = mapped_column(Numeric(14, 2))
     opening_bid: Mapped[float | None] = mapped_column(Numeric(14, 2))
     arv_to_bid_ratio: Mapped[float | None] = mapped_column(Numeric(8, 2))
-    title_clarity: Mapped[int | None] = mapped_column(Integer)          # 0-10
-    condition_risk: Mapped[int | None] = mapped_column(Integer)         # 0-10
-    competition_risk: Mapped[int | None] = mapped_column(Integer)       # 0-10
+    title_clarity: Mapped[int | None] = mapped_column(Integer)  # 0-10
+    condition_risk: Mapped[int | None] = mapped_column(Integer)  # 0-10
+    competition_risk: Mapped[int | None] = mapped_column(Integer)  # 0-10
     post_sale_redemption_risk: Mapped[int | None] = mapped_column(Integer)  # 0-10
 
     # Output
     risk_flags: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
-    flags_detail: Mapped[dict | None] = mapped_column(JSONB)
+    flags_detail: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     score_rationale: Mapped[str | None] = mapped_column(Text)
     scored_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # ── Relationships ─────────────────────────────────────────────────────
-    parcel: Mapped["Parcel"] = relationship("Parcel", back_populates="scores", lazy="raise")  # noqa: F821
+    parcel: Mapped[Parcel] = relationship("Parcel", back_populates="scores", lazy="raise")  # noqa: F821
 
     def __repr__(self) -> str:
         return (

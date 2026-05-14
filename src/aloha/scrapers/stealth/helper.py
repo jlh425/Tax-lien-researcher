@@ -60,6 +60,7 @@ class StealthHelper:
         self._ua_initialized = True
         try:
             from fake_useragent import UserAgent  # type: ignore[import]
+
             self._ua_generator = UserAgent()
         except Exception:
             log.debug("fake_useragent_unavailable", fallback="using hardcoded UA list")
@@ -105,6 +106,7 @@ class StealthHelper:
         # Apply playwright-stealth JS evasions if available (optional dependency)
         try:
             from playwright_stealth import stealth_async  # type: ignore[import]
+
             # stealth_async works on pages, not contexts; apply per-page via route
             # Store flag so new_page callers can apply it
             context._stealth_enabled = True  # type: ignore[attr-defined]

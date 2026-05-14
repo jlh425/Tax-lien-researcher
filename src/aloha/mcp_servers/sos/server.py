@@ -38,109 +38,117 @@ class SOSMCPServer(BaseMCPServer):
         self._register_tools()
 
     def _register_tools(self) -> None:
-        self.register_tool(ToolDefinition(
-            name="sos_lookup_entity",
-            description=(
-                "Search for a business entity by name and state using Cobalt Intelligence. "
-                "Returns a list of matching entities with basic filing information."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "entity_name": {
-                        "type": "string",
-                        "description": "Business entity name to search for.",
+        self.register_tool(
+            ToolDefinition(
+                name="sos_lookup_entity",
+                description=(
+                    "Search for a business entity by name and state using Cobalt Intelligence. "
+                    "Returns a list of matching entities with basic filing information."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "entity_name": {
+                            "type": "string",
+                            "description": "Business entity name to search for.",
+                        },
+                        "state": {
+                            "type": "string",
+                            "description": "Two-letter US state abbreviation (e.g. 'FL', 'TX').",
+                        },
+                        "entity_type": {
+                            "type": "string",
+                            "description": "Optional filter: 'llc', 'corporation', 'lp', etc.",
+                        },
                     },
-                    "state": {
-                        "type": "string",
-                        "description": "Two-letter US state abbreviation (e.g. 'FL', 'TX').",
-                    },
-                    "entity_type": {
-                        "type": "string",
-                        "description": "Optional filter: 'llc', 'corporation', 'lp', etc.",
-                    },
+                    "required": ["entity_name", "state"],
                 },
-                "required": ["entity_name", "state"],
-            },
-            handler=self.sos_lookup_entity,
-        ))
+                handler=self.sos_lookup_entity,
+            )
+        )
 
-        self.register_tool(ToolDefinition(
-            name="sos_get_entity_details",
-            description=(
-                "Fetch full SOS filing details for an entity by its Cobalt entity ID. "
-                "Returns officers, registered agent, formation date, status, and filing URL."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "entity_id": {
-                        "type": "string",
-                        "description": "Cobalt Intelligence entity ID from a prior search.",
+        self.register_tool(
+            ToolDefinition(
+                name="sos_get_entity_details",
+                description=(
+                    "Fetch full SOS filing details for an entity by its Cobalt entity ID. "
+                    "Returns officers, registered agent, formation date, status, and filing URL."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "entity_id": {
+                            "type": "string",
+                            "description": "Cobalt Intelligence entity ID from a prior search.",
+                        },
+                        "state": {
+                            "type": "string",
+                            "description": "State where the entity is filed.",
+                        },
                     },
-                    "state": {
-                        "type": "string",
-                        "description": "State where the entity is filed.",
-                    },
+                    "required": ["entity_id", "state"],
                 },
-                "required": ["entity_id", "state"],
-            },
-            handler=self.sos_get_entity_details,
-        ))
+                handler=self.sos_get_entity_details,
+            )
+        )
 
-        self.register_tool(ToolDefinition(
-            name="sos_search_by_registered_agent",
-            description=(
-                "Find all entities sharing a registered agent in a given state. "
-                "Useful for detecting shell company networks."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "agent_name": {
-                        "type": "string",
-                        "description": "Registered agent name to search for.",
+        self.register_tool(
+            ToolDefinition(
+                name="sos_search_by_registered_agent",
+                description=(
+                    "Find all entities sharing a registered agent in a given state. "
+                    "Useful for detecting shell company networks."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "agent_name": {
+                            "type": "string",
+                            "description": "Registered agent name to search for.",
+                        },
+                        "state": {
+                            "type": "string",
+                            "description": "Two-letter US state abbreviation.",
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of results (default 50).",
+                        },
                     },
-                    "state": {
-                        "type": "string",
-                        "description": "Two-letter US state abbreviation.",
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "Maximum number of results (default 50).",
-                    },
+                    "required": ["agent_name", "state"],
                 },
-                "required": ["agent_name", "state"],
-            },
-            handler=self.sos_search_by_registered_agent,
-        ))
+                handler=self.sos_search_by_registered_agent,
+            )
+        )
 
-        self.register_tool(ToolDefinition(
-            name="sos_search_by_address",
-            description=(
-                "Find all entities registered at a given address in a state. "
-                "Detects shell company networks sharing a registered address."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "address": {
-                        "type": "string",
-                        "description": "Street address to search for.",
+        self.register_tool(
+            ToolDefinition(
+                name="sos_search_by_address",
+                description=(
+                    "Find all entities registered at a given address in a state. "
+                    "Detects shell company networks sharing a registered address."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "address": {
+                            "type": "string",
+                            "description": "Street address to search for.",
+                        },
+                        "state": {
+                            "type": "string",
+                            "description": "Two-letter US state abbreviation.",
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of results (default 50).",
+                        },
                     },
-                    "state": {
-                        "type": "string",
-                        "description": "Two-letter US state abbreviation.",
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "Maximum number of results (default 50).",
-                    },
+                    "required": ["address", "state"],
                 },
-                "required": ["address", "state"],
-            },
-            handler=self.sos_search_by_address,
-        ))
+                handler=self.sos_search_by_address,
+            )
+        )
 
     # ── HTTP client ───────────────────────────────────────────────────────
 
@@ -193,10 +201,14 @@ class SOSMCPServer(BaseMCPServer):
         try:
             data = await self._get("/entities/search", params=params)
             entities = data.get("entities", data.get("results", []))
-            log.info("sos_search_complete", entity_name=entity_name, state=state, count=len(entities))
+            log.info(
+                "sos_search_complete", entity_name=entity_name, state=state, count=len(entities)
+            )
             return {"entities": [_normalise_entity_stub(e) for e in entities]}
         except httpx.HTTPStatusError as exc:
-            log.warning("cobalt_api_error", status=exc.response.status_code, path="/entities/search")
+            log.warning(
+                "cobalt_api_error", status=exc.response.status_code, path="/entities/search"
+            )
             return {"error": f"API error {exc.response.status_code}", "entities": []}
         except Exception as exc:
             log.error("cobalt_request_failed", error=str(exc))
@@ -284,6 +296,7 @@ class SOSMCPServer(BaseMCPServer):
 
 # ── Normalisation helpers ─────────────────────────────────────────────────────
 
+
 def _normalise_entity_stub(raw: dict[str, Any]) -> dict[str, Any]:
     """Map a Cobalt search result row to canonical fields."""
     return {
@@ -343,6 +356,7 @@ def _normalise_entity_detail(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 # ── Factory ───────────────────────────────────────────────────────────────────
+
 
 def create_sos_server() -> SOSMCPServer:
     """Build the SOS MCP server from settings.

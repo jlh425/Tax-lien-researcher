@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 
@@ -30,8 +30,8 @@ class UserPreferencesRepository:
         self,
         user_id: uuid.UUID,
         *,
-        scoring_weights: dict | None = None,
-        api_keys: dict | None = None,
+        scoring_weights: dict[str, Any] | None = None,
+        api_keys: dict[str, Any] | None = None,
     ) -> UserPreferences:
         """Create or update preferences for a user.
 

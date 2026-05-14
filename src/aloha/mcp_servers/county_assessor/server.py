@@ -28,86 +28,92 @@ class CountyAssessorMCPServer(BaseMCPServer):
         self._register_tools()
 
     def _register_tools(self) -> None:
-        self.register_tool(ToolDefinition(
-            name="lookup_parcel",
-            description=(
-                "Look up a parcel by APN (assessor parcel number), state, and county. "
-                "Cascades through ArcGIS → qPublic → Tyler EagleWeb scrapers."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "parcel_id": {
-                        "type": "string",
-                        "description": "Assessor parcel number / APN.",
+        self.register_tool(
+            ToolDefinition(
+                name="lookup_parcel",
+                description=(
+                    "Look up a parcel by APN (assessor parcel number), state, and county. "
+                    "Cascades through ArcGIS → qPublic → Tyler EagleWeb scrapers."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "parcel_id": {
+                            "type": "string",
+                            "description": "Assessor parcel number / APN.",
+                        },
+                        "state": {
+                            "type": "string",
+                            "description": "Two-letter US state abbreviation.",
+                        },
+                        "county": {
+                            "type": "string",
+                            "description": "County name (case-insensitive).",
+                        },
                     },
-                    "state": {
-                        "type": "string",
-                        "description": "Two-letter US state abbreviation.",
-                    },
-                    "county": {
-                        "type": "string",
-                        "description": "County name (case-insensitive).",
-                    },
+                    "required": ["parcel_id", "state", "county"],
                 },
-                "required": ["parcel_id", "state", "county"],
-            },
-            handler=self.lookup_parcel,
-        ))
+                handler=self.lookup_parcel,
+            )
+        )
 
-        self.register_tool(ToolDefinition(
-            name="search_by_address",
-            description=(
-                "Search for parcels by street address using ArcGIS. "
-                "Returns up to 5 matching parcels."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "address": {
-                        "type": "string",
-                        "description": "Street address to search for.",
+        self.register_tool(
+            ToolDefinition(
+                name="search_by_address",
+                description=(
+                    "Search for parcels by street address using ArcGIS. "
+                    "Returns up to 5 matching parcels."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "address": {
+                            "type": "string",
+                            "description": "Street address to search for.",
+                        },
+                        "state": {
+                            "type": "string",
+                            "description": "Two-letter US state abbreviation.",
+                        },
+                        "county": {
+                            "type": "string",
+                            "description": "County name (case-insensitive).",
+                        },
                     },
-                    "state": {
-                        "type": "string",
-                        "description": "Two-letter US state abbreviation.",
-                    },
-                    "county": {
-                        "type": "string",
-                        "description": "County name (case-insensitive).",
-                    },
+                    "required": ["address", "state", "county"],
                 },
-                "required": ["address", "state", "county"],
-            },
-            handler=self.search_by_address,
-        ))
+                handler=self.search_by_address,
+            )
+        )
 
-        self.register_tool(ToolDefinition(
-            name="search_by_owner",
-            description=(
-                "Search for parcels by owner name via ArcGIS, qPublic, or "
-                "Tyler EagleWeb scrapers. Returns up to 10 matching parcels."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "owner_name": {
-                        "type": "string",
-                        "description": "Property owner name to search for.",
+        self.register_tool(
+            ToolDefinition(
+                name="search_by_owner",
+                description=(
+                    "Search for parcels by owner name via ArcGIS, qPublic, or "
+                    "Tyler EagleWeb scrapers. Returns up to 10 matching parcels."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "owner_name": {
+                            "type": "string",
+                            "description": "Property owner name to search for.",
+                        },
+                        "state": {
+                            "type": "string",
+                            "description": "Two-letter US state abbreviation.",
+                        },
+                        "county": {
+                            "type": "string",
+                            "description": "County name (case-insensitive).",
+                        },
                     },
-                    "state": {
-                        "type": "string",
-                        "description": "Two-letter US state abbreviation.",
-                    },
-                    "county": {
-                        "type": "string",
-                        "description": "County name (case-insensitive).",
-                    },
+                    "required": ["owner_name", "state", "county"],
                 },
-                "required": ["owner_name", "state", "county"],
-            },
-            handler=self.search_by_owner,
-        ))
+                handler=self.search_by_owner,
+            )
+        )
 
     # -- Tool handlers ---------------------------------------------------------
 
@@ -199,9 +205,7 @@ class CountyAssessorMCPServer(BaseMCPServer):
 
     # -- Scraper dispatch helpers ----------------------------------------------
 
-    async def _try_arcgis(
-        self, parcel_id: str, key: tuple[str, str]
-    ) -> dict[str, Any] | None:
+    async def _try_arcgis(self, parcel_id: str, key: tuple[str, str]) -> dict[str, Any] | None:
         """Try ArcGIS REST API for the given state/county."""
         from aloha.agents.parcel_research.tools import _ARCGIS_ENDPOINTS
         from aloha.scrapers.tier1_apis.arcgis import ArcGISParcelScraper
@@ -222,9 +226,7 @@ class CountyAssessorMCPServer(BaseMCPServer):
             await scraper.close()
         return None
 
-    async def _try_qpublic(
-        self, parcel_id: str, key: tuple[str, str]
-    ) -> dict[str, Any] | None:
+    async def _try_qpublic(self, parcel_id: str, key: tuple[str, str]) -> dict[str, Any] | None:
         """Try qPublic scraper for the given state/county."""
         from aloha.scrapers.tier2_vendors.qpublic import get_qpublic_scraper
 
@@ -241,9 +243,7 @@ class CountyAssessorMCPServer(BaseMCPServer):
             log.warning("qpublic_query_failed", parcel_id=parcel_id, error=str(exc))
         return None
 
-    async def _try_tyler(
-        self, parcel_id: str, key: tuple[str, str]
-    ) -> dict[str, Any] | None:
+    async def _try_tyler(self, parcel_id: str, key: tuple[str, str]) -> dict[str, Any] | None:
         """Try Tyler EagleWeb scraper for the given state/county."""
         from aloha.scrapers.tier2_vendors.tyler import get_eagleweb_scraper
 
@@ -344,6 +344,7 @@ class CountyAssessorMCPServer(BaseMCPServer):
 
 
 # -- Factory -------------------------------------------------------------------
+
 
 def create_county_assessor_server() -> CountyAssessorMCPServer:
     """Build the County Assessor MCP server.

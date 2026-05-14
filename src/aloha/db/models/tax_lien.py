@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Any
 
 from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
@@ -25,7 +26,10 @@ class TaxLien(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     parcel_id: Mapped[str] = mapped_column(
-        String(100), ForeignKey("parcels.parcel_id", ondelete="CASCADE"), nullable=False, index=True
+        String(100),
+        ForeignKey("parcels.parcel_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
 
     # Instrument classification — drives scoring model
@@ -35,7 +39,9 @@ class TaxLien(Base):
     # lien_certificate | tax_deed | hybrid_pending
 
     # Shared fields
-    lien_status: Mapped[str] = mapped_column(String(30), nullable=False, default="active", index=True)
+    lien_status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="active", index=True
+    )
     tax_year: Mapped[int | None] = mapped_column(Integer)
     years_delinquent: Mapped[int | None] = mapped_column(Integer)
     principal_amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
@@ -58,7 +64,7 @@ class TaxLien(Base):
     auction_url: Mapped[str | None] = mapped_column(Text)
     opening_bid: Mapped[float | None] = mapped_column(Numeric(14, 2))
     post_sale_redemption_days: Mapped[int | None] = mapped_column(Integer)
-    title_encumbrances: Mapped[dict | None] = mapped_column(JSONB)
+    title_encumbrances: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     title_risk_level: Mapped[str | None] = mapped_column(String(30))
     # clear|minor|significant|clouded
 
@@ -69,7 +75,7 @@ class TaxLien(Base):
     last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # ── Relationships ─────────────────────────────────────────────────────
-    parcel: Mapped["Parcel"] = relationship("Parcel", back_populates="tax_liens", lazy="raise")  # noqa: F821
+    parcel: Mapped[Parcel] = relationship("Parcel", back_populates="tax_liens", lazy="raise")  # noqa: F821
 
     def __repr__(self) -> str:
         return (

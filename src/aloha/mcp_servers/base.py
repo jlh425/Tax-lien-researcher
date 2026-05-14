@@ -5,8 +5,9 @@ Provides common setup patterns used by all Aloha MCP server implementations.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
-from typing import Any, Callable, Coroutine
+from typing import Any
 
 import structlog
 

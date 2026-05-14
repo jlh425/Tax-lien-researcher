@@ -29,7 +29,7 @@ log = structlog.get_logger().bind(component="captcha_handler")
 
 _SUBMIT_URL = "https://2captcha.com/in.php"
 _RESULT_URL = "https://2captcha.com/res.php"
-_POLL_INTERVAL = 5   # seconds between status checks
+_POLL_INTERVAL = 5  # seconds between status checks
 _OK_PREFIX = "OK|"
 
 
@@ -46,6 +46,7 @@ class CaptchaHandler:
         else:
             try:
                 from aloha.config import settings
+
                 self._api_key = settings.two_captcha_api_key
             except Exception:
                 self._api_key = None
@@ -160,7 +161,7 @@ class CaptchaHandler:
             return None
 
         if text.startswith(_OK_PREFIX):
-            captcha_id = text[len(_OK_PREFIX):]
+            captcha_id = text[len(_OK_PREFIX) :]
             log.debug("captcha_submitted", captcha_id=captcha_id)
             return captcha_id
 
@@ -185,7 +186,7 @@ class CaptchaHandler:
             return None
 
         if text.startswith(_OK_PREFIX):
-            return text[len(_OK_PREFIX):]
+            return text[len(_OK_PREFIX) :]
         log.warning("captcha_image_submit_error", response=text)
         return None
 
@@ -213,7 +214,7 @@ class CaptchaHandler:
                 return None
 
             if text.startswith(_OK_PREFIX):
-                token = text[len(_OK_PREFIX):]
+                token = text[len(_OK_PREFIX) :]
                 log.debug("captcha_solved", captcha_id=captcha_id)
                 return token
 

@@ -41,8 +41,12 @@ def upgrade() -> None:
         sa.Column("physical_address", sa.Text),
         sa.Column("settings", postgresql.JSONB, nullable=False, server_default="{}"),
         sa.Column("is_active", sa.Boolean, nullable=False, server_default="true"),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("email"),
     )
@@ -76,8 +80,12 @@ def upgrade() -> None:
         sa.Column("data_freshness", sa.String(20), nullable=False, server_default="fresh"),
         sa.Column("content_hash", sa.String(64)),
         sa.Column("last_crawled_at", sa.DateTime(timezone=True)),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("parcel_id"),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="SET NULL"),
     )
@@ -90,7 +98,9 @@ def upgrade() -> None:
         "tax_liens",
         sa.Column("id", sa.Integer, autoincrement=True, nullable=False),
         sa.Column("parcel_id", sa.String(100), nullable=False),
-        sa.Column("instrument_type", sa.String(30), nullable=False, server_default="lien_certificate"),
+        sa.Column(
+            "instrument_type", sa.String(30), nullable=False, server_default="lien_certificate"
+        ),
         sa.Column("lien_status", sa.String(30), nullable=False, server_default="active"),
         sa.Column("tax_year", sa.Integer),
         sa.Column("years_delinquent", sa.Integer),
@@ -151,7 +161,9 @@ def upgrade() -> None:
         sa.Column("email", sa.String(255)),
         sa.Column("content_hash", sa.String(64)),
         sa.Column("last_researched_at", sa.DateTime(timezone=True)),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
 
@@ -177,8 +189,12 @@ def upgrade() -> None:
         sa.Column("best_contact_address", sa.Text),
         sa.Column("research_depth", sa.Integer, nullable=False, server_default="0"),
         sa.Column("sources", postgresql.JSONB),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(["parcel_id"], ["parcels.parcel_id"], ondelete="CASCADE"),
     )
@@ -243,8 +259,12 @@ def upgrade() -> None:
         sa.Column("completed_at", sa.DateTime(timezone=True)),
         sa.Column("payload", postgresql.JSONB),
         sa.Column("result", postgresql.JSONB),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(["parcel_id"], ["parcels.parcel_id"], ondelete="CASCADE"),
     )
@@ -341,7 +361,9 @@ def upgrade() -> None:
         sa.Column("follow_up_sent", sa.Boolean, nullable=False, server_default="false"),
         sa.Column("provider", sa.String(30)),
         sa.Column("provider_msg_id", sa.String(255)),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["parcel_id"], ["parcels.parcel_id"], ondelete="SET NULL"),
@@ -365,7 +387,9 @@ def upgrade() -> None:
         sa.Column("reason", sa.String(50)),
         sa.Column("source", sa.String(50)),
         sa.Column("owner_id", sa.Integer),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(["owner_id"], ["owners.id"], ondelete="SET NULL"),
         sa.UniqueConstraint("contact_value", "contact_type", name="uq_dnc_contact"),
@@ -383,8 +407,12 @@ def upgrade() -> None:
         sa.Column("body", sa.Text, nullable=False),
         sa.Column("variables", postgresql.ARRAY(sa.Text)),
         sa.Column("is_active", sa.Boolean, nullable=False, server_default="true"),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("template_name"),
     )
@@ -398,7 +426,9 @@ def upgrade() -> None:
         sa.Column("source_type", sa.String(50)),
         sa.Column("source_url", sa.Text),
         sa.Column("content", sa.Text, nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(["parcel_id"], ["parcels.parcel_id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["entity_id"], ["entities.id"], ondelete="CASCADE"),
@@ -415,7 +445,9 @@ def upgrade() -> None:
         sa.Column("message", sa.Text),
         sa.Column("sent", sa.Boolean, nullable=False, server_default="false"),
         sa.Column("sent_at", sa.DateTime(timezone=True)),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(["parcel_id"], ["parcels.parcel_id"], ondelete="CASCADE"),
     )

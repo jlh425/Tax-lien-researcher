@@ -225,7 +225,8 @@ async def resolve_user_model(
             active_id: str | None = user_settings.get("active_llm_id")
             if configured and active_id:
                 entry = next(
-                    (e for e in configured if e["id"] == active_id), None,
+                    (e for e in configured if e["id"] == active_id),
+                    None,
                 )
                 if entry:
                     provider = entry["provider"]
@@ -235,7 +236,8 @@ async def resolve_user_model(
                     api_key: str | None = None
                     if provider != "ollama":
                         api_key = await svc.get_decrypted_key(
-                            UUID(user_id), provider,
+                            UUID(user_id),
+                            provider,
                         )
                         if not api_key:
                             log.warning(
@@ -254,7 +256,10 @@ async def resolve_user_model(
                                 source="configured_llms",
                             )
                             return _build_model_with_key(
-                                provider, model_name, api_key, base_url,
+                                provider,
+                                model_name,
+                                api_key,
+                                base_url,
                             )
                     else:
                         log.info(
@@ -266,7 +271,9 @@ async def resolve_user_model(
                             source="configured_llms",
                         )
                         return _build_model_with_key(
-                            "ollama", model_name, base_url=base_url,
+                            "ollama",
+                            model_name,
+                            base_url=base_url,
                         )
 
             # ── Legacy flat fields fallback ─────────────────────────────

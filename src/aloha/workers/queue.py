@@ -8,14 +8,16 @@ from __future__ import annotations
 
 import asyncio
 import importlib
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from aloha.agents import AGENT_REGISTRY
 from aloha.db.engine import async_session_factory
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 log: structlog.stdlib.BoundLogger = structlog.get_logger().bind(component="queue_runner")
 
@@ -60,7 +62,7 @@ async def _resolve_agent(agent_name: str) -> Any:
 
     module = importlib.import_module(module_path)
     # Convention: each agent module exposes an ``agent`` attribute.
-    return getattr(module, "agent")
+    return module.agent
 
 
 async def process_one(session: AsyncSession) -> bool:

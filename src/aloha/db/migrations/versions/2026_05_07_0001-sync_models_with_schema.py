@@ -17,7 +17,6 @@ Create Date: 2026-05-07
 """
 
 from alembic import op
-import sqlalchemy as sa
 
 # revision identifiers
 revision = "c7a1b3d9f021"
@@ -29,26 +28,18 @@ depends_on = None
 def upgrade() -> None:
     # ── pgvector cleanup ─────────────────────────────────────────────
     # Drop HNSW index if it exists (created by original initial migration)
-    op.execute(
-        "DROP INDEX IF EXISTS idx_chunks_embedding"
-    )
+    op.execute("DROP INDEX IF EXISTS idx_chunks_embedding")
     # Drop the embedding column if it exists
-    op.execute(
-        "ALTER TABLE document_chunks DROP COLUMN IF EXISTS embedding"
-    )
+    op.execute("ALTER TABLE document_chunks DROP COLUMN IF EXISTS embedding")
     # Drop the pgvector extension if it exists
-    op.execute(
-        "DROP EXTENSION IF EXISTS vector"
-    )
+    op.execute("DROP EXTENSION IF EXISTS vector")
 
     # ── Missing individual indexes on parcels ────────────────────────
     # The model declares index=True on both county and state individually,
     # but the initial migration only created a composite index.  A composite
     # (county, state) index serves county-only queries efficiently, so we
     # only need to add the missing state index for state-only filters.
-    op.create_index(
-        "ix_parcels_state", "parcels", ["state"]
-    )
+    op.create_index("ix_parcels_state", "parcels", ["state"])
 
 
 def downgrade() -> None:
@@ -59,10 +50,7 @@ def downgrade() -> None:
     # Re-create the extension
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
     # Re-add the embedding column
-    op.execute(
-        "ALTER TABLE document_chunks "
-        "ADD COLUMN embedding vector(1536)"
-    )
+    op.execute("ALTER TABLE document_chunks ADD COLUMN embedding vector(1536)")
     # Re-create the HNSW index
     op.execute(
         "CREATE INDEX idx_chunks_embedding ON document_chunks "

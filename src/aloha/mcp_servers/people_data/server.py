@@ -36,71 +36,77 @@ class PeopleDataMCPServer(BaseMCPServer):
         self._register_tools()
 
     def _register_tools(self) -> None:
-        self.register_tool(ToolDefinition(
-            name="enrich_person",
-            description=(
-                "Enrich a person record using People Data Labs. Provide a name "
-                "and optionally a location or company to get contact details, "
-                "employment history, and social profiles."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "name": {
-                        "type": "string",
-                        "description": "Full name of the person.",
+        self.register_tool(
+            ToolDefinition(
+                name="enrich_person",
+                description=(
+                    "Enrich a person record using People Data Labs. Provide a name "
+                    "and optionally a location or company to get contact details, "
+                    "employment history, and social profiles."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Full name of the person.",
+                        },
+                        "location": {
+                            "type": "string",
+                            "description": "City, state, or full address (optional).",
+                        },
+                        "company": {
+                            "type": "string",
+                            "description": "Current or recent employer (optional).",
+                        },
                     },
-                    "location": {
-                        "type": "string",
-                        "description": "City, state, or full address (optional).",
-                    },
-                    "company": {
-                        "type": "string",
-                        "description": "Current or recent employer (optional).",
-                    },
+                    "required": ["name"],
                 },
-                "required": ["name"],
-            },
-            handler=self.enrich_person,
-        ))
+                handler=self.enrich_person,
+            )
+        )
 
-        self.register_tool(ToolDefinition(
-            name="verify_email",
-            description=(
-                "Verify an email address using Hunter.io. Returns deliverability "
-                "status, score, and whether the address is disposable."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "email": {
-                        "type": "string",
-                        "description": "Email address to verify.",
+        self.register_tool(
+            ToolDefinition(
+                name="verify_email",
+                description=(
+                    "Verify an email address using Hunter.io. Returns deliverability "
+                    "status, score, and whether the address is disposable."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "email": {
+                            "type": "string",
+                            "description": "Email address to verify.",
+                        },
                     },
+                    "required": ["email"],
                 },
-                "required": ["email"],
-            },
-            handler=self.verify_email,
-        ))
+                handler=self.verify_email,
+            )
+        )
 
-        self.register_tool(ToolDefinition(
-            name="search_phone",
-            description=(
-                "Search for a person by phone number using People Data Labs. "
-                "Returns matching person records with contact information."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "phone": {
-                        "type": "string",
-                        "description": "Phone number (E.164 format preferred, e.g. '+14155551234').",
+        self.register_tool(
+            ToolDefinition(
+                name="search_phone",
+                description=(
+                    "Search for a person by phone number using People Data Labs. "
+                    "Returns matching person records with contact information."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "phone": {
+                            "type": "string",
+                            "description": "Phone number (E.164 format preferred, e.g. '+14155551234').",
+                        },
                     },
+                    "required": ["phone"],
                 },
-                "required": ["phone"],
-            },
-            handler=self.search_phone,
-        ))
+                handler=self.search_phone,
+            )
+        )
 
     # -- HTTP client -----------------------------------------------------------
 
@@ -196,6 +202,7 @@ class PeopleDataMCPServer(BaseMCPServer):
 
 # -- Normalisation helpers -----------------------------------------------------
 
+
 def _normalise_pdl_person(raw: dict[str, Any]) -> dict[str, Any]:
     """Map a PDL person response to canonical fields."""
     return {
@@ -226,6 +233,7 @@ def _normalise_hunter_verification(raw: dict[str, Any]) -> dict[str, Any]:
 
 # -- Factory -------------------------------------------------------------------
 
+
 def create_people_data_server() -> PeopleDataMCPServer:
     """Build the People Data MCP server from settings.
 
@@ -243,7 +251,5 @@ def create_people_data_server() -> PeopleDataMCPServer:
     if not hunter_key:
         missing.append("HUNTER_IO_API_KEY")
     if missing:
-        raise ValueError(
-            f"{', '.join(missing)} required to use the People Data MCP server."
-        )
+        raise ValueError(f"{', '.join(missing)} required to use the People Data MCP server.")
     return PeopleDataMCPServer(pdl_api_key=pdl_key, hunter_api_key=hunter_key)

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Dict, Tuple
 
 
 class TokenBucketRateLimiter:
@@ -24,8 +23,8 @@ class TokenBucketRateLimiter:
         self.rate = rate
         self.burst = burst
         # domain -> (tokens, last_refill_ts)
-        self._buckets: Dict[str, Tuple[float, float]] = {}
-        self._locks: Dict[str, asyncio.Lock] = {}
+        self._buckets: dict[str, tuple[float, float]] = {}
+        self._locks: dict[str, asyncio.Lock] = {}
 
     def _get_lock(self, domain: str) -> asyncio.Lock:
         if domain not in self._locks:

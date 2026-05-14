@@ -16,9 +16,9 @@ log: structlog.stdlib.BoundLogger = structlog.get_logger().bind(component="pdf_p
 class PDFKind(StrEnum):
     """Classification of a PDF's text layer."""
 
-    NATIVE = auto()     # Selectable / searchable text
-    SCANNED = auto()    # Image-only; needs OCR
-    MIXED = auto()      # Some pages native, some scanned
+    NATIVE = auto()  # Selectable / searchable text
+    SCANNED = auto()  # Image-only; needs OCR
+    MIXED = auto()  # Some pages native, some scanned
 
 
 @dataclass(slots=True)

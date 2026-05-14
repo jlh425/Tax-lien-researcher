@@ -13,15 +13,16 @@ This agent is started alongside the Orchestrator in main.py lifespan.
 
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime, timedelta, timezone
-from typing import Any
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Any
 
 import structlog
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from aloha.agents.base import BaseAgent
 from aloha.db.engine import async_session_factory
+
+if TYPE_CHECKING:
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 log = structlog.get_logger().bind(agent="database")
 
@@ -68,17 +69,28 @@ class DatabaseAgent(BaseAgent):
 
     async def refresh_stale_parcels(self, stale_after_days: int = 14) -> int:
         """Mark parcels not crawled in N days as stale and re-enqueue."""
-        cutoff = datetime.now(tz=timezone.utc) - timedelta(days=stale_after_days)
-        from sqlalchemy import update
+        from sqlalchemy import select
 
         from aloha.db.models.parcel import Parcel
         from aloha.db.repositories import ParcelRepository, QueueRepository
+
+        older_than_hours = stale_after_days * 24
 
         async with async_session_factory() as session:
             parcel_repo = ParcelRepository(session)
             queue_repo = QueueRepository(session)
 
-            stale = await parcel_repo.mark_stale(older_than=cutoff)
+            # Query parcels that will be marked stale (before marking)
+            cutoff = datetime.now(tz=UTC) - timedelta(hours=older_than_hours)
+            stmt = select(Parcel).where(
+                Parcel.data_freshness == "fresh",
+                Parcel.last_crawled_at < cutoff,
+            )
+            result = await session.execute(stmt)
+            stale = list(result.scalars().all())
+
+            # Mark them stale via repository
+            await parcel_repo.mark_stale(older_than_hours=older_than_hours)
 
             # Re-enqueue stale parcels for parcel research
             for parcel in stale:
@@ -107,22 +119,26 @@ class DatabaseAgent(BaseAgent):
         total = 0
         for state, county in _SCHEDULED_COUNTIES:
             try:
-                result = await discovery_agent.run({
-                    "state": state,
-                    "county": county,
-                    "max_records": 5000,
-                })
+                result = await discovery_agent.run(
+                    {
+                        "state": state,
+                        "county": county,
+                        "max_records": 5000,
+                    }
+                )
                 enqueued = result.get("enqueued", 0)
                 total += enqueued
                 log.info("scheduled_discovery_done", state=state, county=county, enqueued=enqueued)
             except Exception as exc:
-                log.warning("scheduled_discovery_failed", state=state, county=county, error=str(exc))
+                log.warning(
+                    "scheduled_discovery_failed", state=state, county=county, error=str(exc)
+                )
 
         return total
 
     async def cleanup_complete_queue(self, older_than_days: int = 30) -> int:
         """Delete completed/failed queue items older than N days."""
-        cutoff = datetime.now(tz=timezone.utc) - timedelta(days=older_than_days)
+        cutoff = datetime.now(tz=UTC) - timedelta(days=older_than_days)
         from sqlalchemy import delete
 
         from aloha.db.models.queue_item import QueueItem
@@ -135,7 +151,7 @@ class DatabaseAgent(BaseAgent):
                 )
             )
             await session.commit()
-            deleted = result.rowcount
+            deleted: int = result.rowcount or 0
 
         log.info("queue_cleanup_done", deleted=deleted, older_than_days=older_than_days)
         return deleted
@@ -146,7 +162,9 @@ class DatabaseAgent(BaseAgent):
 
         async with async_session_factory() as session:
             queue_repo = QueueRepository(session)
-            reset = await queue_repo.reset_stalled(stall_minutes=stall_minutes)
+            reset = await queue_repo.reset_stalled(
+                stalled_after_minutes=stall_minutes,
+            )
             await session.commit()
 
         if reset:

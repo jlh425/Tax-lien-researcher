@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Any
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
@@ -18,7 +19,10 @@ class Owner(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     parcel_id: Mapped[str] = mapped_column(
-        String(100), ForeignKey("parcels.parcel_id", ondelete="CASCADE"), nullable=False, index=True
+        String(100),
+        ForeignKey("parcels.parcel_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
 
     # Owner of record (exactly as on deed)
@@ -50,14 +54,14 @@ class Owner(Base, TimestampMixin):
 
     # Research depth completed (1-5 levels)
     research_depth: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    sources: Mapped[dict | None] = mapped_column(JSONB)
+    sources: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     # ── Relationships ─────────────────────────────────────────────────────
-    parcel: Mapped["Parcel"] = relationship("Parcel", back_populates="owners", lazy="raise")  # noqa: F821
-    entity_links: Mapped[list["OwnerEntity"]] = relationship(
+    parcel: Mapped[Parcel] = relationship("Parcel", back_populates="owners", lazy="raise")  # noqa: F821
+    entity_links: Mapped[list[OwnerEntity]] = relationship(
         "OwnerEntity", back_populates="owner", cascade="all, delete-orphan", lazy="raise"
     )
-    outreach_logs: Mapped[list["OutreachLog"]] = relationship(  # noqa: F821
+    outreach_logs: Mapped[list[OutreachLog]] = relationship(  # noqa: F821
         "OutreachLog", back_populates="owner", lazy="raise"
     )
 
@@ -80,22 +84,22 @@ class Entity(Base):
     formation_date: Mapped[date | None] = mapped_column(Date)
     registered_agent: Mapped[str | None] = mapped_column(Text)
     registered_agent_address: Mapped[str | None] = mapped_column(Text)
-    officers: Mapped[dict | None] = mapped_column(JSONB)       # [{name, title}]
-    managers_members: Mapped[dict | None] = mapped_column(JSONB)
+    officers: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)  # [{name, title}]
+    managers_members: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
     sos_filing_url: Mapped[str | None] = mapped_column(Text)
 
     # Related entities (same manager/address)
-    related_entity_ids: Mapped[list | None] = mapped_column(JSONB)
+    related_entity_ids: Mapped[list[int] | None] = mapped_column(JSONB)
 
     # Financials
-    ucc_filings: Mapped[dict | None] = mapped_column(JSONB)
-    federal_tax_liens: Mapped[dict | None] = mapped_column(JSONB)
-    state_tax_liens: Mapped[dict | None] = mapped_column(JSONB)
-    bankruptcy_history: Mapped[dict | None] = mapped_column(JSONB)
+    ucc_filings: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    federal_tax_liens: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    state_tax_liens: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    bankruptcy_history: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     # Litigation
     litigation_summary: Mapped[str | None] = mapped_column(Text)
-    pacer_results: Mapped[dict | None] = mapped_column(JSONB)
+    pacer_results: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     # Contact
     website: Mapped[str | None] = mapped_column(Text)
@@ -108,7 +112,7 @@ class Entity(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # ── Relationships ─────────────────────────────────────────────────────
-    owner_links: Mapped[list["OwnerEntity"]] = relationship(
+    owner_links: Mapped[list[OwnerEntity]] = relationship(
         "OwnerEntity", back_populates="entity", cascade="all, delete-orphan", lazy="raise"
     )
 
@@ -128,5 +132,5 @@ class OwnerEntity(Base):
         Integer, ForeignKey("entities.id", ondelete="CASCADE"), primary_key=True
     )
 
-    owner: Mapped["Owner"] = relationship("Owner", back_populates="entity_links", lazy="raise")
-    entity: Mapped["Entity"] = relationship("Entity", back_populates="owner_links", lazy="raise")
+    owner: Mapped[Owner] = relationship("Owner", back_populates="entity_links", lazy="raise")
+    entity: Mapped[Entity] = relationship("Entity", back_populates="owner_links", lazy="raise")

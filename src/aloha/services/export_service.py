@@ -5,9 +5,11 @@ from __future__ import annotations
 import csv
 import io
 from pathlib import Path
+from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound, select_autoescape
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from aloha.db.models.parcel import Parcel
@@ -19,7 +21,7 @@ _TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "pdf" / "templates"
 class ExportService(BaseService):
     """PDF and CSV export for parcel data."""
 
-    def __init__(self, session, *, template_dir: Path | None = None) -> None:
+    def __init__(self, session: AsyncSession, *, template_dir: Path | None = None) -> None:
         super().__init__(session)
         tpl_dir = template_dir or _TEMPLATE_DIR
         self._jinja = Environment(
@@ -51,13 +53,15 @@ class ExportService(BaseService):
         if parcel is None:
             raise ValueError(f"Parcel {parcel_id!r} not found")
 
-        html = self._render_html_report({
-            "parcel": parcel,
-            "liens": sorted(parcel.tax_liens, key=lambda l: l.tax_year or 0, reverse=True),
-            "owners": parcel.owners,
-            "scores": sorted(parcel.scores, key=lambda s: s.scored_at, reverse=True),
-            "images": parcel.property_images,
-        })
+        html = self._render_html_report(
+            {
+                "parcel": parcel,
+                "liens": sorted(parcel.tax_liens, key=lambda l: l.tax_year or 0, reverse=True),
+                "owners": parcel.owners,
+                "scores": sorted(parcel.scores, key=lambda s: s.scored_at, reverse=True),
+                "images": parcel.property_images,
+            }
+        )
 
         self.log.info("pdf_generated", parcel_id=parcel_id)
         return HTML(string=html).write_pdf()
@@ -72,8 +76,14 @@ class ExportService(BaseService):
         If *columns* is ``None``, a default set of columns is used.
         """
         default_columns = [
-            "parcel_id", "state", "county", "address", "property_type",
-            "acreage", "assessed_total", "research_status",
+            "parcel_id",
+            "state",
+            "county",
+            "address",
+            "property_type",
+            "acreage",
+            "assessed_total",
+            "research_status",
         ]
         cols = columns or default_columns
 
@@ -97,7 +107,7 @@ class ExportService(BaseService):
 
     # ── Private helpers ──────────────────────────────────────────────────
 
-    def _render_html_report(self, data: dict) -> str:
+    def _render_html_report(self, data: dict[str, Any]) -> str:
         """Render a parcel report HTML page using Jinja2."""
         try:
             template = self._jinja.get_template("parcel_report.html")
@@ -107,7 +117,7 @@ class ExportService(BaseService):
         return template.render(**data)
 
     @staticmethod
-    def _minimal_report(data: dict) -> str:
+    def _minimal_report(data: dict[str, Any]) -> str:
         """Minimal HTML report when no template file is available."""
         parcel = data["parcel"]
         return f"""\
@@ -116,8 +126,8 @@ class ExportService(BaseService):
 <body>
 <h1>{parcel.parcel_id}</h1>
 <p>{parcel.state} / {parcel.county}</p>
-<p>Address: {parcel.address or 'N/A'}</p>
-<p>Assessed Total: {parcel.assessed_total or 'N/A'}</p>
+<p>Address: {parcel.address or "N/A"}</p>
+<p>Assessed Total: {parcel.assessed_total or "N/A"}</p>
 <p>Status: {parcel.research_status}</p>
 </body>
 </html>"""

@@ -3,18 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from aloha.scrapers.base import BaseScraper
 
 
 @dataclass(frozen=True, slots=True)
 class ScraperEntry:
     """Metadata for a registered scraper."""
 
-    scraper_class: str          # Dotted import path, e.g. "aloha.scrapers.fl.duval.DuvalScraper"
-    tier: int                   # 1 = simple HTML, 2 = JS-rendered, 3 = CAPTCHA / login
+    scraper_class: str  # Dotted import path, e.g. "aloha.scrapers.fl.duval.DuvalScraper"
+    tier: int  # 1 = simple HTML, 2 = JS-rendered, 3 = CAPTCHA / login
     notes: str = ""
 
 

@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from aloha.api.schemas.parcels import QueueStatusOut, ScanResponse
 from aloha.db.models.parcel import Parcel
 from aloha.db.models.queue_item import QueueItem
 from aloha.services.base import BaseService
-from aloha.services.billing_service import BillingService
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from aloha.services.billing_service import BillingService
 
 
 class ResearchService(BaseService):
@@ -61,8 +65,7 @@ class ResearchService(BaseService):
     async def get_queue_status(self, user_id: str | None = None) -> QueueStatusOut:
         """Return current queue depth by status."""
         result = await self._session.execute(
-            select(QueueItem.status, func.count().label("cnt"))
-            .group_by(QueueItem.status),
+            select(QueueItem.status, func.count().label("cnt")).group_by(QueueItem.status),
         )
         counts = {row.status: row.cnt for row in result}
 
@@ -89,15 +92,12 @@ class ResearchService(BaseService):
 
         # Get pending/processing queue items for this parcel
         result = await self._session.execute(
-            select(QueueItem.agent_name, QueueItem.status)
-            .where(
+            select(QueueItem.agent_name, QueueItem.status).where(
                 QueueItem.parcel_id == parcel_id,
                 QueueItem.status.in_(["pending", "processing"]),
             ),
         )
-        active_items = [
-            {"agent": row.agent_name, "status": row.status} for row in result
-        ]
+        active_items = [{"agent": row.agent_name, "status": row.status} for row in result]
 
         return {
             "parcel_id": parcel_id,
@@ -140,8 +140,8 @@ class ResearchService(BaseService):
             priority=5,
             status="pending",
             payload=payload,
-            created_at=datetime.now(tz=timezone.utc),
-            updated_at=datetime.now(tz=timezone.utc),
+            created_at=datetime.now(tz=UTC),
+            updated_at=datetime.now(tz=UTC),
         )
         self._session.add(item)
         await self._session.flush()

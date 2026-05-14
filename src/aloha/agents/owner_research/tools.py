@@ -76,6 +76,7 @@ def classify_owner_type(owner_name: str) -> dict[str, Any]:
 
 # ── Absentee detection ────────────────────────────────────────────────────────
 
+
 def detect_absentee(
     property_address: str | None,
     mailing_address: str | None,
@@ -95,7 +96,7 @@ def detect_absentee(
     if not property_address or not mailing_address:
         return {"is_absentee": None, "match_confidence": "unknown"}
 
-    def _normalise(addr: str) -> str:
+    def _normalise(addr: str) -> list[str]:
         """Strip punctuation and lowercase for fuzzy comparison."""
         return re.sub(r"[^a-z0-9\s]", "", addr.lower()).split()
 
@@ -124,11 +125,57 @@ def detect_absentee(
 
 # Common US state abbreviations (2-letter)
 _US_STATES = {
-    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI",
-    "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN",
-    "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH",
-    "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA",
-    "WV", "WI", "WY",
+    "AL",
+    "AK",
+    "AZ",
+    "AR",
+    "CA",
+    "CO",
+    "CT",
+    "DE",
+    "DC",
+    "FL",
+    "GA",
+    "HI",
+    "ID",
+    "IL",
+    "IN",
+    "IA",
+    "KS",
+    "KY",
+    "LA",
+    "ME",
+    "MD",
+    "MA",
+    "MI",
+    "MN",
+    "MS",
+    "MO",
+    "MT",
+    "NE",
+    "NV",
+    "NH",
+    "NJ",
+    "NM",
+    "NY",
+    "NC",
+    "ND",
+    "OH",
+    "OK",
+    "OR",
+    "PA",
+    "RI",
+    "SC",
+    "SD",
+    "TN",
+    "TX",
+    "UT",
+    "VT",
+    "VA",
+    "WA",
+    "WV",
+    "WI",
+    "WY",
 }
 
 
@@ -150,7 +197,13 @@ def parse_mailing_address(raw_address: str) -> dict[str, Any]:
         return {"street": None, "city": None, "state": None, "zip": None, "full": ""}
 
     addr = raw_address.strip()
-    result: dict[str, Any] = {"full": addr, "street": None, "city": None, "state": None, "zip": None}
+    result: dict[str, Any] = {
+        "full": addr,
+        "street": None,
+        "city": None,
+        "state": None,
+        "zip": None,
+    }
 
     # Extract ZIP (5 or 5+4)
     zip_match = re.search(r"\b(\d{5})(?:-\d{4})?\b", addr)

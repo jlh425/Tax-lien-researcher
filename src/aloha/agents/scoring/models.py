@@ -29,30 +29,30 @@ from typing import Any
 class ScoringResult:
     """Output of a scoring model run."""
 
-    instrument_type: str               # lien_certificate | tax_deed
-    overall_score: int                 # 0–100
+    instrument_type: str  # lien_certificate | tax_deed
+    overall_score: int  # 0–100
     score_model_version: str
 
     # Shared
-    property_potential: int = 0        # 0–10
-    risk_score: int = 0                # 0–10 (lower = less risky)
+    property_potential: int = 0  # 0–10
+    risk_score: int = 0  # 0–10 (lower = less risky)
 
     # Lien cert factors
     lien_to_value_ratio: float | None = None
     certificate_rate: float | None = None
     years_delinquent: int | None = None
-    owner_motivation: int = 0          # 0–10
-    contact_reachability: int = 0      # 0–10
-    redemption_urgency: int = 0        # 0–10
+    owner_motivation: int = 0  # 0–10
+    contact_reachability: int = 0  # 0–10
+    redemption_urgency: int = 0  # 0–10
 
     # Deed factors
     arv_estimate: float | None = None
     opening_bid: float | None = None
     arv_to_bid_ratio: float | None = None
-    title_clarity: int = 0             # 0–10
-    condition_risk: int = 0            # 0–10
-    competition_risk: int = 0          # 0–10
-    post_sale_redemption_risk: int = 0 # 0–10
+    title_clarity: int = 0  # 0–10
+    condition_risk: int = 0  # 0–10
+    competition_risk: int = 0  # 0–10
+    post_sale_redemption_risk: int = 0  # 0–10
 
     # Flags
     risk_flags: list[str] = field(default_factory=list)
@@ -61,6 +61,7 @@ class ScoringResult:
 
 
 # ── Lien Certificate Model ────────────────────────────────────────────────────
+
 
 def score_lien_certificate(
     parcel: dict[str, Any],
@@ -97,7 +98,7 @@ def score_lien_certificate(
     ltv_score = 0
     if assessed_total and assessed_total > 0:
         ltv = total_owed / assessed_total
-        if ltv <= 0.02:          # <2% = tiny lien relative to value → very safe
+        if ltv <= 0.02:  # <2% = tiny lien relative to value → very safe
             ltv_score = 25
         elif ltv <= 0.05:
             ltv_score = 22
@@ -132,12 +133,11 @@ def score_lien_certificate(
     # ── 3. Redemption Urgency (20 pts) ────────────────────────────────────
     redemption_urgency = 5
     deadline = lien.get("redemption_deadline")
-    if deadline:
-        if isinstance(deadline, str):
-            try:
-                deadline = date.fromisoformat(deadline[:10])
-            except ValueError:
-                deadline = None
+    if deadline and isinstance(deadline, str):
+        try:
+            deadline = date.fromisoformat(deadline[:10])
+        except ValueError:
+            deadline = None
     if isinstance(deadline, date):
         days_left = (deadline - date.today()).days
         flags_detail["days_to_redemption"] = days_left
@@ -167,7 +167,7 @@ def score_lien_certificate(
         flags_detail["absentee"] = True
     owner_type = owner.get("owner_type", "unknown")
     if owner_type in ("llc", "trust", "corporation", "partnership"):
-        motivation += 2   # entities often want to sell vs. fight a lien
+        motivation += 2  # entities often want to sell vs. fight a lien
     years_delinquent = lien.get("years_delinquent") or 0
     if isinstance(years_delinquent, (int, float)):
         motivation += min(int(years_delinquent), 4)  # cap at 4 pts
@@ -175,7 +175,11 @@ def score_lien_certificate(
     # ── Financial health signals from Entity ─────────────────────────────
     if entity_data:
         _apply_financial_health(
-            entity_data, motivation, flags, flags_detail, rationale_parts,
+            entity_data,
+            motivation,
+            flags,
+            flags_detail,
+            rationale_parts,
         )
         motivation = flags_detail.get("_motivation_after_entity", motivation)
         # Clean up internal key
@@ -217,9 +221,13 @@ def score_lien_certificate(
 
     # Property potential (0-10)
     property_type = parcel.get("property_type", "unknown")
-    potential = {"residential": 8, "commercial": 7, "land": 5, "industrial": 6, "agricultural": 4}.get(
-        property_type, 5
-    )
+    potential = {
+        "residential": 8,
+        "commercial": 7,
+        "land": 5,
+        "industrial": 6,
+        "agricultural": 4,
+    }.get(property_type, 5)
 
     return ScoringResult(
         instrument_type="lien_certificate",
@@ -240,6 +248,7 @@ def score_lien_certificate(
 
 
 # ── Tax Deed Model ────────────────────────────────────────────────────────────
+
 
 def score_tax_deed(
     parcel: dict[str, Any],
@@ -365,7 +374,7 @@ def score_tax_deed(
     # Online platforms = more competition; courthouse steps = less
     online_platforms = {"bid4assets", "realauction", "govease", "sri", "lienhub", "lgbs"}
     if any(p in str(auction_platform).lower() for p in online_platforms):
-        competition_val = 4   # higher online competition
+        competition_val = 4  # higher online competition
         competition_pts = 4
         flags.append("online_auction_competition")
     elif "courthouse" in str(auction_platform).lower():
@@ -380,7 +389,11 @@ def score_tax_deed(
     motivation = 0
     if entity_data:
         _apply_financial_health(
-            entity_data, motivation, flags, flags_detail, rationale_parts,
+            entity_data,
+            motivation,
+            flags,
+            flags_detail,
+            rationale_parts,
         )
         motivation = flags_detail.pop("_motivation_after_entity", motivation)
     motivation = min(motivation, 10)
@@ -404,8 +417,11 @@ def score_tax_deed(
     risk = min(risk, 10)
 
     potential_map = {
-        "residential": 8, "commercial": 7, "land": 6,
-        "industrial": 5, "agricultural": 4,
+        "residential": 8,
+        "commercial": 7,
+        "land": 6,
+        "industrial": 5,
+        "agricultural": 4,
     }
     potential = potential_map.get(property_type, 5)
 
@@ -430,6 +446,7 @@ def score_tax_deed(
 
 
 # ── Shared Financial Health Helper ────────────────────────────────────────────
+
 
 def _apply_financial_health(
     entity_data: dict[str, Any],
@@ -457,20 +474,15 @@ def _apply_financial_health(
     # Federal / state tax liens → very motivated seller
     fed_liens = entity_data.get("federal_tax_liens") or []
     state_liens = entity_data.get("state_tax_liens") or []
-    all_tax_liens = (
-        (fed_liens if isinstance(fed_liens, list) else [])
-        + (state_liens if isinstance(state_liens, list) else [])
+    all_tax_liens = (fed_liens if isinstance(fed_liens, list) else []) + (
+        state_liens if isinstance(state_liens, list) else []
     )
     if all_tax_liens:
         motivation += 3
-        total_amount = sum(
-            float(tl.get("amount") or 0) for tl in all_tax_liens
-        )
+        total_amount = sum(float(tl.get("amount") or 0) for tl in all_tax_liens)
         flags.append("entity_tax_liens")
         flags_detail["entity_tax_lien_total"] = round(total_amount, 2)
-        health_notes.append(
-            f"{len(all_tax_liens)} tax lien(s) totalling ${total_amount:,.0f}"
-        )
+        health_notes.append(f"{len(all_tax_liens)} tax lien(s) totalling ${total_amount:,.0f}")
 
     # Bankruptcy history → distressed
     bankruptcy = entity_data.get("bankruptcy_history")
@@ -486,9 +498,7 @@ def _apply_financial_health(
         health_notes.append("active litigation noted")
 
     if health_notes:
-        rationale_parts.append(
-            "Financial health: " + "; ".join(health_notes)
-        )
+        rationale_parts.append("Financial health: " + "; ".join(health_notes))
 
     # Store updated motivation for caller
     flags_detail["_motivation_after_entity"] = motivation

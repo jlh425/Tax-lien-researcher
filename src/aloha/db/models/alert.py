@@ -17,9 +17,7 @@ class Alert(Base):
     """
 
     __tablename__ = "alerts"
-    __table_args__ = (
-        Index("idx_alerts_unsent", "alert_date", postgresql_where="sent = FALSE"),
-    )
+    __table_args__ = (Index("idx_alerts_unsent", "alert_date", postgresql_where="sent = FALSE"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     parcel_id: Mapped[str | None] = mapped_column(
@@ -34,7 +32,7 @@ class Alert(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # ── Relationships ─────────────────────────────────────────────────────
-    parcel: Mapped["Parcel | None"] = relationship(  # noqa: F821
+    parcel: Mapped[Parcel | None] = relationship(  # noqa: F821
         "Parcel", back_populates="alerts", lazy="raise"
     )
 

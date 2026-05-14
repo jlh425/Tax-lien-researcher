@@ -5,7 +5,18 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import ARRAY, Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    ARRAY,
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -80,15 +91,13 @@ class OutreachLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # ── Relationships ─────────────────────────────────────────────────────
-    user: Mapped["User"] = relationship("User", back_populates="outreach_logs", lazy="raise")  # noqa: F821
-    owner: Mapped["Owner | None"] = relationship(  # noqa: F821
+    user: Mapped[User] = relationship("User", back_populates="outreach_logs", lazy="raise")  # noqa: F821
+    owner: Mapped[Owner | None] = relationship(  # noqa: F821
         "Owner", back_populates="outreach_logs", lazy="raise"
     )
 
     def __repr__(self) -> str:
-        return (
-            f"<OutreachLog id={self.id} channel={self.channel!r} status={self.status!r}>"
-        )
+        return f"<OutreachLog id={self.id} channel={self.channel!r} status={self.status!r}>"
 
 
 class DoNotContact(Base):
@@ -135,6 +144,5 @@ class OutreachTemplate(Base):
 
     def __repr__(self) -> str:
         return (
-            f"<OutreachTemplate id={self.id} name={self.template_name!r} "
-            f"channel={self.channel!r}>"
+            f"<OutreachTemplate id={self.id} name={self.template_name!r} channel={self.channel!r}>"
         )

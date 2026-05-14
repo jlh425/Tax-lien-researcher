@@ -12,7 +12,7 @@ Responsibilities:
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -114,9 +114,11 @@ class ParcelResearchAgent(BaseAgent):
             }
 
         # ── Step 2: Parse legal description ──────────────────────────────
-        legal_desc = raw.get("legal_description") or raw.get("raw_attributes", {}).get(
-            "LEGAL_DESC"
-        ) or raw.get("raw_attributes", {}).get("LEGAL")
+        legal_desc = (
+            raw.get("legal_description")
+            or raw.get("raw_attributes", {}).get("LEGAL_DESC")
+            or raw.get("raw_attributes", {}).get("LEGAL")
+        )
         parsed_legal = parse_legal_description(legal_desc or "")
 
         # ── Step 3: Classify property type ────────────────────────────────
@@ -178,7 +180,7 @@ class ParcelResearchAgent(BaseAgent):
         updates: dict[str, Any] = {
             "property_type": property_type,
             "research_status": "parcel_researched",
-            "last_crawled_at": datetime.now(tz=timezone.utc),
+            "last_crawled_at": datetime.now(tz=UTC),
         }
 
         # Direct field mappings from ArcGIS normalised output
@@ -199,17 +201,19 @@ class ParcelResearchAgent(BaseAgent):
 
         # Zoning notes from subdivision name if parsed
         if parsed_legal.get("subdivision"):
-            updates["zoning_notes"] = (
-                f"Subdivision: {parsed_legal['subdivision']}"
-            )
+            updates["zoning_notes"] = f"Subdivision: {parsed_legal['subdivision']}"
 
         # Geometry from raw_attributes fallback (extra fields assessors expose)
         raw_attrs = raw.get("raw_attributes", {})
         _try_int(raw_attrs, updates, "assessed_land_val", ("LAND_VAL", "ASSD_LND", "LAND_VALUE"))
         _try_int(raw_attrs, updates, "assessed_impr_val", ("IMPR_VAL", "ASSD_BLD", "BLDG_VALUE"))
-        _try_int(raw_attrs, updates, "market_value_est", ("JUST_VALUE", "MARKET_VALUE", "MARKET_VAL"))
+        _try_int(
+            raw_attrs, updates, "market_value_est", ("JUST_VALUE", "MARKET_VALUE", "MARKET_VAL")
+        )
         _try_int(raw_attrs, updates, "year_built", ("YEAR_BLT", "YR_BUILT", "YEAR_BUILT"))
-        _try_int(raw_attrs, updates, "last_sale_price", ("SALE_PRICE", "LAST_SALE_PRICE", "SALES_PRICE"))
+        _try_int(
+            raw_attrs, updates, "last_sale_price", ("SALE_PRICE", "LAST_SALE_PRICE", "SALES_PRICE")
+        )
 
         # Content hash for change detection
         updates["content_hash"] = _hash(raw)
@@ -277,6 +281,7 @@ agent = ParcelResearchAgent()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _copy_if_present(src: dict[str, Any], dst: dict[str, Any], key: str) -> None:
     val = src.get(key)

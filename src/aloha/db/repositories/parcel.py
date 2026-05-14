@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from aloha.db.models.parcel import Parcel
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class ParcelRepository:
@@ -54,9 +58,7 @@ class ParcelRepository:
     async def update_status(self, parcel_id: str, status: str) -> None:
         """Update the research_status field for a parcel."""
         await self._session.execute(
-            update(Parcel)
-            .where(Parcel.parcel_id == parcel_id)
-            .values(research_status=status)
+            update(Parcel).where(Parcel.parcel_id == parcel_id).values(research_status=status)
         )
 
     async def mark_stale(self, older_than_hours: int = 24) -> int:
@@ -74,7 +76,7 @@ class ParcelRepository:
             )
             .values(data_freshness="stale")
         )
-        return result.rowcount
+        return result.rowcount or 0
 
     async def count(
         self,

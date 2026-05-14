@@ -18,9 +18,7 @@ class DocumentChunk(Base):
     """
 
     __tablename__ = "document_chunks"
-    __table_args__ = (
-        Index("idx_chunks_parcel", "parcel_id"),
-    )
+    __table_args__ = (Index("idx_chunks_parcel", "parcel_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     parcel_id: Mapped[str | None] = mapped_column(
@@ -38,7 +36,7 @@ class DocumentChunk(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # ── Relationships ─────────────────────────────────────────────────────
-    parcel: Mapped["Parcel | None"] = relationship(  # noqa: F821
+    parcel: Mapped[Parcel | None] = relationship(  # noqa: F821
         "Parcel", back_populates="document_chunks", lazy="raise"
     )
 

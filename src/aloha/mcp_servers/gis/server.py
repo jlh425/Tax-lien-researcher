@@ -35,74 +35,80 @@ class GISMCPServer(BaseMCPServer):
         self._register_tools()
 
     def _register_tools(self) -> None:
-        self.register_tool(ToolDefinition(
-            name="geocode_address",
-            description=(
-                "Convert a street address to geographic coordinates using "
-                "the Google Geocoding API."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "address": {
-                        "type": "string",
-                        "description": "Full street address to geocode.",
+        self.register_tool(
+            ToolDefinition(
+                name="geocode_address",
+                description=(
+                    "Convert a street address to geographic coordinates using "
+                    "the Google Geocoding API."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "address": {
+                            "type": "string",
+                            "description": "Full street address to geocode.",
+                        },
                     },
+                    "required": ["address"],
                 },
-                "required": ["address"],
-            },
-            handler=self.geocode_address,
-        ))
+                handler=self.geocode_address,
+            )
+        )
 
-        self.register_tool(ToolDefinition(
-            name="reverse_geocode",
-            description=(
-                "Convert latitude/longitude coordinates to a formatted address "
-                "using the Google Geocoding API."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "latitude": {
-                        "type": "number",
-                        "description": "Latitude in decimal degrees.",
+        self.register_tool(
+            ToolDefinition(
+                name="reverse_geocode",
+                description=(
+                    "Convert latitude/longitude coordinates to a formatted address "
+                    "using the Google Geocoding API."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "latitude": {
+                            "type": "number",
+                            "description": "Latitude in decimal degrees.",
+                        },
+                        "longitude": {
+                            "type": "number",
+                            "description": "Longitude in decimal degrees.",
+                        },
                     },
-                    "longitude": {
-                        "type": "number",
-                        "description": "Longitude in decimal degrees.",
-                    },
+                    "required": ["latitude", "longitude"],
                 },
-                "required": ["latitude", "longitude"],
-            },
-            handler=self.reverse_geocode,
-        ))
+                handler=self.reverse_geocode,
+            )
+        )
 
-        self.register_tool(ToolDefinition(
-            name="get_parcel_boundary",
-            description=(
-                "Retrieve the parcel boundary polygon (GeoJSON) for a given "
-                "parcel ID via county ArcGIS feature layers."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "parcel_id": {
-                        "type": "string",
-                        "description": "Assessor parcel number.",
+        self.register_tool(
+            ToolDefinition(
+                name="get_parcel_boundary",
+                description=(
+                    "Retrieve the parcel boundary polygon (GeoJSON) for a given "
+                    "parcel ID via county ArcGIS feature layers."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "parcel_id": {
+                            "type": "string",
+                            "description": "Assessor parcel number.",
+                        },
+                        "state": {
+                            "type": "string",
+                            "description": "Two-letter US state abbreviation.",
+                        },
+                        "county": {
+                            "type": "string",
+                            "description": "County name.",
+                        },
                     },
-                    "state": {
-                        "type": "string",
-                        "description": "Two-letter US state abbreviation.",
-                    },
-                    "county": {
-                        "type": "string",
-                        "description": "County name.",
-                    },
+                    "required": ["parcel_id", "state", "county"],
                 },
-                "required": ["parcel_id", "state", "county"],
-            },
-            handler=self.get_parcel_boundary,
-        ))
+                handler=self.get_parcel_boundary,
+            )
+        )
 
     # -- HTTP client -----------------------------------------------------------
 
@@ -142,9 +148,7 @@ class GISMCPServer(BaseMCPServer):
             log.error("geocode_failed", error=str(exc))
             return {"error": str(exc), "results": []}
 
-    async def reverse_geocode(
-        self, latitude: float, longitude: float
-    ) -> dict[str, Any]:
+    async def reverse_geocode(self, latitude: float, longitude: float) -> dict[str, Any]:
         """Reverse geocode coordinates via Google Maps Geocoding API."""
         try:
             client = await self._get_client()
@@ -202,7 +206,7 @@ class GISMCPServer(BaseMCPServer):
                     "boundary": None,
                 }
 
-            raw_attrs = result.get("raw_attributes", {})
+            result.get("raw_attributes", {})
             # The scraper's _normalise already extracted centroid; we need
             # the raw geometry rings from a direct query.
             # Re-query with geometry explicitly for the raw rings.
@@ -217,9 +221,7 @@ class GISMCPServer(BaseMCPServer):
                 # Fall back to the already-found result with centroid only
                 return {
                     "parcel_id": parcel_id,
-                    "boundary": _point_geojson(
-                        result.get("latitude"), result.get("longitude")
-                    ),
+                    "boundary": _point_geojson(result.get("latitude"), result.get("longitude")),
                     "centroid": {
                         "latitude": result.get("latitude"),
                         "longitude": result.get("longitude"),
@@ -236,9 +238,7 @@ class GISMCPServer(BaseMCPServer):
                 }
             else:
                 # Point geometry fallback
-                geojson = _point_geojson(
-                    geometry.get("y"), geometry.get("x")
-                )
+                geojson = _point_geojson(geometry.get("y"), geometry.get("x"))
 
             log.info(
                 "parcel_boundary_found",
@@ -268,6 +268,7 @@ class GISMCPServer(BaseMCPServer):
 
 # -- Geometry helpers ----------------------------------------------------------
 
+
 def _point_geojson(lat: float | None, lng: float | None) -> dict[str, Any] | None:
     """Build a GeoJSON Point from lat/lng, or None."""
     if lat is not None and lng is not None:
@@ -276,6 +277,7 @@ def _point_geojson(lat: float | None, lng: float | None) -> dict[str, Any] | Non
 
 
 # -- Normalisation helpers -----------------------------------------------------
+
 
 def _normalise_geocode_result(raw: dict[str, Any]) -> dict[str, Any]:
     """Map a Google Geocoding API result to canonical fields."""
@@ -299,6 +301,7 @@ def _normalise_geocode_result(raw: dict[str, Any]) -> dict[str, Any]:
 
 # -- Factory -------------------------------------------------------------------
 
+
 def create_gis_server() -> GISMCPServer:
     """Build the GIS MCP server from settings.
 
@@ -309,7 +312,5 @@ def create_gis_server() -> GISMCPServer:
 
     api_key = settings.google_maps_api_key
     if not api_key:
-        raise ValueError(
-            "GOOGLE_MAPS_API_KEY is required to use the GIS MCP server."
-        )
+        raise ValueError("GOOGLE_MAPS_API_KEY is required to use the GIS MCP server.")
     return GISMCPServer(api_key=api_key)

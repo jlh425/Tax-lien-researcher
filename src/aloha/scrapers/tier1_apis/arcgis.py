@@ -49,8 +49,7 @@ _LAND_USE_FIELD_ALIASES = ("LAND_USE", "LANDUSE", "USE_CODE", "LUC")
 ARCGIS_PARCEL_LAYERS: dict[tuple[str, str], str] = {
     # Natrona County, WY — City of Casper Open Data hub
     ("WY", "natrona"): (
-        "https://services.arcgis.com/YkVYBaX0zmYbMEMQ/"
-        "arcgis/rest/services/Parcels/FeatureServer/0"
+        "https://services.arcgis.com/YkVYBaX0zmYbMEMQ/arcgis/rest/services/Parcels/FeatureServer/0"
     ),
 }
 
@@ -83,9 +82,11 @@ class ArcGISParcelScraper(BaseScraper):
 
     # ── BaseScraper interface ─────────────────────────────────────────────
 
-    async def scrape(self, url: str, params: dict[str, Any] | None = None) -> Any:
+    async def scrape(  # type: ignore[override]
+        self, url: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         response = await self._fetch(url, params=params)
-        return response.json()
+        return response.json()  # type: ignore[no-any-return]
 
     # ── Public API ────────────────────────────────────────────────────────
 
@@ -190,7 +191,7 @@ class ArcGISParcelScraper(BaseScraper):
             "land_use_code": _pick(attrs, _LAND_USE_FIELD_ALIASES),
             "latitude": lat,
             "longitude": lng,
-            "raw_attributes": attrs,   # keep original for fallback field extraction
+            "raw_attributes": attrs,  # keep original for fallback field extraction
         }
 
 
@@ -257,6 +258,7 @@ class ArcGISMapExporter:
 
 
 # ── Type coercion helpers ─────────────────────────────────────────────────────
+
 
 def _to_float(value: Any) -> float | None:
     if value is None:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import httpx
 from sqlalchemy import select
@@ -35,7 +35,7 @@ class NotificationService(BaseService):
             message=message,
             alert_date=alert_date,
             sent=False,
-            created_at=datetime.now(tz=timezone.utc),
+            created_at=datetime.now(tz=UTC),
         )
         self._session.add(alert)
         await self._session.flush()

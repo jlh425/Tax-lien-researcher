@@ -108,9 +108,7 @@ class Bid4AssetsScraper(BaseScraper):
         parcel_id = str(parcel_id).upper().strip()
 
         # County from record or constructor
-        county = (
-            str(raw.get("county") or raw.get("location") or self.county or "").lower().strip()
-        )
+        county = str(raw.get("county") or raw.get("location") or self.county or "").lower().strip()
 
         # Auction date
         auction_date_raw = (
@@ -138,7 +136,8 @@ class Bid4AssetsScraper(BaseScraper):
             "parcel_id": parcel_id,
             "state": self.state,
             "county": county or self.county or "",
-            "address": str(raw.get("address") or raw.get("property_address") or "").strip() or None,
+            "address": str(raw.get("address") or raw.get("property_address") or "").strip()
+            or None,
             "auction_date": auction_date,
             "opening_bid": opening_bid,
             "auction_platform": "bid4assets",
@@ -153,6 +152,7 @@ def _parse_date_str(value: Any) -> str | None:
     if not value:
         return None
     from datetime import date
+
     s = str(value).strip()
     # Try YYYY-MM-DD
     try:

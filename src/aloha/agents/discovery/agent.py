@@ -11,13 +11,17 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
 
 from aloha.agents.base import BaseAgent
-from aloha.agents.discovery.state_registry import InstrumentType, classify_instrument, get_state_info
+from aloha.agents.discovery.state_registry import (
+    InstrumentType,
+    classify_instrument,
+    get_state_info,
+)
 from aloha.db.engine import async_session_factory
 from aloha.db.models.crawl_log import CrawlLog
 from aloha.db.models.parcel import Parcel
@@ -44,7 +48,7 @@ class DiscoveryAgent(BaseAgent):
     # ── Abstract interface ────────────────────────────────────────────────
 
     def get_tools(self) -> list[dict[str, Any]]:
-        return []   # Discovery uses scrapers directly, not LLM tool calls
+        return []  # Discovery uses scrapers directly, not LLM tool calls
 
     async def run(self, context: dict[str, Any]) -> dict[str, Any]:
         state: str = context["state"].upper()
@@ -59,14 +63,17 @@ class DiscoveryAgent(BaseAgent):
         instrument = classify_instrument(state, county)
 
         # Respect instrument filter if provided
-        if instrument_filter and instrument_filter != instrument.value:
-            if instrument != InstrumentType.HYBRID:
-                self.log.info(
-                    "instrument_mismatch_skipping",
-                    requested=instrument_filter,
-                    state_instrument=instrument.value,
-                )
-                return {"status": "skipped", "reason": "instrument_mismatch"}
+        if (
+            instrument_filter
+            and instrument_filter != instrument.value
+            and instrument != InstrumentType.HYBRID
+        ):
+            self.log.info(
+                "instrument_mismatch_skipping",
+                requested=instrument_filter,
+                state_instrument=instrument.value,
+            )
+            return {"status": "skipped", "reason": "instrument_mismatch"}
 
         self.log.info(
             "instrument_classified",
@@ -129,7 +136,9 @@ class DiscoveryAgent(BaseAgent):
             try:
                 records = await scraper.discover(max_records=max_records)
                 if records:
-                    auction_records = await self._auction_scrape(state, county, instrument, max_records)
+                    auction_records = await self._auction_scrape(
+                        state, county, instrument, max_records
+                    )
                     if auction_records:
                         seen: set[str] = {r["parcel_id"] for r in records if r.get("parcel_id")}
                         for r in auction_records:
@@ -147,7 +156,9 @@ class DiscoveryAgent(BaseAgent):
             try:
                 records = await self._tier2_scrape(state, county, max_records)
                 if records:
-                    auction_records = await self._auction_scrape(state, county, instrument, max_records)
+                    auction_records = await self._auction_scrape(
+                        state, county, instrument, max_records
+                    )
                     if auction_records:
                         seen = {r["parcel_id"] for r in records if r.get("parcel_id")}
                         for r in auction_records:
@@ -185,12 +196,12 @@ class DiscoveryAgent(BaseAgent):
         # Augment with auction platform data (runs regardless of tier result)
         auction_records = await self._auction_scrape(state, county, instrument, max_records)
         if auction_records:
-            seen: set[str] = {r["parcel_id"] for r in records if r.get("parcel_id")}
+            seen_ids: set[str] = {r["parcel_id"] for r in records if r.get("parcel_id")}
             for r in auction_records:
                 pid = r.get("parcel_id")
-                if pid and pid not in seen:
+                if pid and pid not in seen_ids:
                     records.append(r)
-                    seen.add(pid)
+                    seen_ids.add(pid)
 
         return records
 
@@ -214,8 +225,9 @@ class DiscoveryAgent(BaseAgent):
         self, state: str, county: str, max_records: int
     ) -> list[dict[str, Any]]:
         """Dispatch to the appropriate vendor-template scraper."""
-        from aloha.scrapers.registry import get_scraper_entry
         import importlib
+
+        from aloha.scrapers.registry import get_scraper_entry
 
         entry = get_scraper_entry(state, county)
         if entry is None:
@@ -305,7 +317,7 @@ class DiscoveryAgent(BaseAgent):
     ) -> int:
         """Upsert parcel + lien records and enqueue each for parcel research."""
         enqueued = 0
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
 
         async with async_session_factory() as session:
             parcel_repo = ParcelRepository(session)
@@ -372,7 +384,7 @@ class DiscoveryAgent(BaseAgent):
                 )
 
                 # Enqueue for parcel research
-                existing_count = await queue_repo.get_pending_count(agent_name="parcel_research")
+                await queue_repo.get_pending_count(agent_name="parcel_research")
                 # Simple dedup: only enqueue if no pending parcel research for this parcel
                 await queue_repo.enqueue(
                     agent_name="parcel_research",
@@ -389,6 +401,7 @@ class DiscoveryAgent(BaseAgent):
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _hash(data: dict[str, Any]) -> str:
     """MD5 of a dict for change detection."""
@@ -420,7 +433,7 @@ def _deadline_priority(raw: dict[str, Any]) -> int:
             deadline = date.fromisoformat(str(deadline_str))
         days_left = (deadline - date.today()).days
         if days_left <= 30:
-            return 1   # urgent
+            return 1  # urgent
         if days_left <= 90:
             return 2
         return 5

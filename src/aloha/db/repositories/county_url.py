@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from aloha.db.models.county_url import CountyUrl
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class CountyUrlRepository:
@@ -14,9 +18,7 @@ class CountyUrlRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def get_url(
-        self, state: str, county: str, url_type: str
-    ) -> CountyUrl | None:
+    async def get_url(self, state: str, county: str, url_type: str) -> CountyUrl | None:
         """Get the highest-confidence URL for a county + url_type."""
         stmt = (
             select(CountyUrl)

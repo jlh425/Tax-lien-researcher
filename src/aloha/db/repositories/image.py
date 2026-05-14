@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select as sa_select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from aloha.db.models.document_chunk import DocumentChunk
 from aloha.db.models.property_image import PropertyImage
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class PropertyImageRepository:

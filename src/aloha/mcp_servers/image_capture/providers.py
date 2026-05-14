@@ -9,10 +9,10 @@ ProviderChain tries each provider in order and returns the first successful byte
 
 from __future__ import annotations
 
-import structlog
 from abc import ABC, abstractmethod
 
 import httpx
+import structlog
 
 log = structlog.get_logger().bind(component="image_providers")
 

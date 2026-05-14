@@ -86,6 +86,7 @@ class AdaptiveBrowserScraper:
             return self._model
         try:
             from aloha.core.llm import get_agent_model
+
             self._model = get_agent_model("discovery")
         except Exception as exc:
             log.debug("adaptive_llm_unavailable", error=str(exc))
@@ -163,9 +164,7 @@ class AdaptiveBrowserScraper:
         """Ask the LLM to identify the search form and result structure."""
         # Capture simplified DOM text (first 8 000 chars)
         try:
-            dom_text: str = await page.evaluate(
-                "() => document.body.innerText.slice(0, 8000)"
-            )
+            dom_text: str = await page.evaluate("() => document.body.innerText.slice(0, 8000)")
         except Exception:
             dom_text = ""
 
@@ -207,6 +206,7 @@ class AdaptiveBrowserScraper:
 
         try:
             from pydantic_ai import Agent
+
             agent: Agent[None, PagePlan] = Agent(
                 model,
                 result_type=PagePlan,
@@ -282,13 +282,14 @@ class AdaptiveBrowserScraper:
     ) -> dict[str, Any] | None:
         """Map raw column dict to canonical scraper output fields."""
         values = list(raw.values())
-        all_text = " ".join(values).lower()
+        " ".join(values).lower()
 
         # Attempt to find a parcel ID — look for common patterns
         parcel_id = self._pick_alias(raw, _APN_ALIASES)
         if not parcel_id:
             # Try to find a value that looks like an APN (digits/dashes, 8-20 chars)
             import re
+
             for v in values:
                 v = v.strip()
                 if re.match(r"^[\dA-Z\-\.\/]{6,20}$", v, re.IGNORECASE):
@@ -313,7 +314,7 @@ class AdaptiveBrowserScraper:
             "owner": owner,
             "assessed_total": self._to_float(assessed_total),
             "source_url": "",
-            "instrument_type": None,   # discovery agent will infer from state
+            "instrument_type": None,  # discovery agent will infer from state
         }
 
     @staticmethod

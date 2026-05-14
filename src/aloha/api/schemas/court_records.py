@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-
 # ── Cases ─────────────────────────────────────────────────────────────────────
+
 
 class PartyOut(BaseModel):
     name: str | None = None
@@ -33,6 +33,7 @@ class CaseSearchResponse(BaseModel):
 
 
 # ── Liens ─────────────────────────────────────────────────────────────────────
+
 
 class LienOut(BaseModel):
     filing_number: str | None = None

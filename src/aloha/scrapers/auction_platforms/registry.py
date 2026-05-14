@@ -13,23 +13,20 @@ Usage::
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    pass
+from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
 class AuctionEntry:
     """Registry entry for an auction platform scraper."""
 
-    platform: str   # "bid4assets" | "realauction" | "govease"
+    platform: str  # "bid4assets" | "realauction" | "govease"
     notes: str = ""
 
 
 def _build_registry() -> dict[tuple[str, str], AuctionEntry]:
-    from aloha.scrapers.auction_platforms.realauction import REALAUCTION_ENDPOINTS
     from aloha.scrapers.auction_platforms.govease import GOVEASE_ENDPOINTS
+    from aloha.scrapers.auction_platforms.realauction import REALAUCTION_ENDPOINTS
 
     registry: dict[tuple[str, str], AuctionEntry] = {}
 
@@ -64,8 +61,9 @@ def get_auction_scraper(state: str, county: str) -> Any | None:
 
     if entry is None:
         # Check if Bid4Assets covers this state (broad coverage, no county-specific registry)
+        from aloha.agents.discovery.state_registry import InstrumentType, classify_instrument
         from aloha.scrapers.auction_platforms.bid4assets import get_bid4assets_scraper
-        from aloha.agents.discovery.state_registry import classify_instrument, InstrumentType
+
         instrument = classify_instrument(state)
         if instrument == InstrumentType.TAX_DEED:
             return get_bid4assets_scraper(state, county)
@@ -73,14 +71,17 @@ def get_auction_scraper(state: str, county: str) -> Any | None:
 
     if entry.platform == "realauction":
         from aloha.scrapers.auction_platforms.realauction import get_realauction_scraper
+
         return get_realauction_scraper(state, county)
 
     if entry.platform == "govease":
         from aloha.scrapers.auction_platforms.govease import get_govease_scraper
+
         return get_govease_scraper(state, county)
 
     if entry.platform == "bid4assets":
         from aloha.scrapers.auction_platforms.bid4assets import get_bid4assets_scraper
+
         return get_bid4assets_scraper(state, county)
 
     return None

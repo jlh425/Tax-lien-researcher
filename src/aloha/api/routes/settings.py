@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from aloha.api.deps import get_db, require_user
 from aloha.api.schemas.settings import (
@@ -30,6 +29,9 @@ from aloha.api.schemas.settings import (
 )
 from aloha.db.repositories.user_preferences import UserPreferencesRepository
 from aloha.services.api_key_service import ApiKeyService
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -136,10 +138,15 @@ async def test_llm(
             )
 
     success, message, response_text = await svc.test_llm_connection(
-        body.provider, body.model, api_key, body.base_url,
+        body.provider,
+        body.model,
+        api_key,
+        body.base_url,
     )
     return TestLlmResponse(
-        success=success, message=message, response_text=response_text,
+        success=success,
+        message=message,
+        response_text=response_text,
     )
 
 
@@ -170,7 +177,11 @@ async def add_configured_llm(
             raise ValueError(f"No API key provided or stored for {body.provider}")
 
     entry = await svc.add_configured_llm(
-        user.id, body.provider, body.model, api_key, body.base_url,
+        user.id,
+        body.provider,
+        body.model,
+        api_key,
+        body.base_url,
     )
 
     # Build masked key for response
@@ -244,9 +255,7 @@ async def get_preferences(
     return UserPreferencesResponse(
         scoring_weights=ScoringWeightsSchema(**prefs.scoring_weights),
         api_keys=UserApiKeysSchema(**prefs.api_keys),
-        include_screenshots=prefs.scoring_weights.get(
-            "include_screenshots", True
-        ),
+        include_screenshots=prefs.scoring_weights.get("include_screenshots", True),
     )
 
 
@@ -265,29 +274,19 @@ async def update_preferences(
         if scoring_weights is None:
             # Load existing weights so we don't clobber them
             existing = await repo.get_by_user_id(user.id)
-            scoring_weights = (
-                dict(existing.scoring_weights) if existing else {}
-            )
+            scoring_weights = dict(existing.scoring_weights) if existing else {}
         scoring_weights["include_screenshots"] = body.include_screenshots
 
     api_keys: dict | None = None
     if body.api_keys is not None:
         api_keys = body.api_keys.model_dump(exclude_none=True)
 
-    prefs = await repo.upsert(
-        user.id, scoring_weights=scoring_weights, api_keys=api_keys
-    )
+    prefs = await repo.upsert(user.id, scoring_weights=scoring_weights, api_keys=api_keys)
 
     return UserPreferencesResponse(
         scoring_weights=ScoringWeightsSchema(
-            **{
-                k: v
-                for k, v in prefs.scoring_weights.items()
-                if k != "include_screenshots"
-            }
+            **{k: v for k, v in prefs.scoring_weights.items() if k != "include_screenshots"}
         ),
         api_keys=UserApiKeysSchema(**prefs.api_keys),
-        include_screenshots=prefs.scoring_weights.get(
-            "include_screenshots", True
-        ),
+        include_screenshots=prefs.scoring_weights.get("include_screenshots", True),
     )

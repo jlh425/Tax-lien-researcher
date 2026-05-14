@@ -41,57 +41,61 @@ class UCCMCPServer(BaseMCPServer):
         self._register_tools()
 
     def _register_tools(self) -> None:
-        self.register_tool(ToolDefinition(
-            name="search_ucc_filings",
-            description=(
-                "Search Uniform Commercial Code filings by debtor name and state "
-                "using Cobalt Intelligence API with state scraper fallback. "
-                "Returns matching filings with secured party and collateral info."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "debtor_name": {
-                        "type": "string",
-                        "description": "Name of the debtor (person or entity).",
+        self.register_tool(
+            ToolDefinition(
+                name="search_ucc_filings",
+                description=(
+                    "Search Uniform Commercial Code filings by debtor name and state "
+                    "using Cobalt Intelligence API with state scraper fallback. "
+                    "Returns matching filings with secured party and collateral info."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "debtor_name": {
+                            "type": "string",
+                            "description": "Name of the debtor (person or entity).",
+                        },
+                        "state": {
+                            "type": "string",
+                            "description": "Two-letter US state abbreviation.",
+                        },
+                        "filing_type": {
+                            "type": "string",
+                            "description": "Optional filter: 'initial', 'amendment', 'continuation'.",
+                        },
                     },
-                    "state": {
-                        "type": "string",
-                        "description": "Two-letter US state abbreviation.",
-                    },
-                    "filing_type": {
-                        "type": "string",
-                        "description": "Optional filter: 'initial', 'amendment', 'continuation'.",
-                    },
+                    "required": ["debtor_name", "state"],
                 },
-                "required": ["debtor_name", "state"],
-            },
-            handler=self.search_ucc_filings,
-        ))
+                handler=self.search_ucc_filings,
+            )
+        )
 
-        self.register_tool(ToolDefinition(
-            name="get_filing_details",
-            description=(
-                "Fetch full UCC filing details by filing number and state "
-                "from Cobalt Intelligence. Returns debtor, secured party, "
-                "collateral description, and lapse date."
-            ),
-            input_schema={
-                "type": "object",
-                "properties": {
-                    "filing_number": {
-                        "type": "string",
-                        "description": "UCC filing number from a prior search.",
+        self.register_tool(
+            ToolDefinition(
+                name="get_filing_details",
+                description=(
+                    "Fetch full UCC filing details by filing number and state "
+                    "from Cobalt Intelligence. Returns debtor, secured party, "
+                    "collateral description, and lapse date."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "filing_number": {
+                            "type": "string",
+                            "description": "UCC filing number from a prior search.",
+                        },
+                        "state": {
+                            "type": "string",
+                            "description": "State where the filing was recorded.",
+                        },
                     },
-                    "state": {
-                        "type": "string",
-                        "description": "State where the filing was recorded.",
-                    },
+                    "required": ["filing_number", "state"],
                 },
-                "required": ["filing_number", "state"],
-            },
-            handler=self.get_filing_details,
-        ))
+                handler=self.get_filing_details,
+            )
+        )
 
     # ── Tool handlers ─────────────────────────────────────────────────────
 
@@ -194,6 +198,7 @@ class UCCMCPServer(BaseMCPServer):
 
 # ── Normalisation helpers ─────────────────────────────────────────────────────
 
+
 def _normalise_ucc_filing(raw: dict[str, Any]) -> dict[str, Any]:
     """Map a raw UCC filing record to canonical fields."""
     return {
@@ -209,6 +214,7 @@ def _normalise_ucc_filing(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 # ── Factory ───────────────────────────────────────────────────────────────────
+
 
 def create_ucc_server() -> UCCMCPServer:
     """Build the UCC MCP server from settings.
