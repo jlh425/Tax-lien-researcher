@@ -297,8 +297,8 @@ def _try_int(
             try:
                 dst[dst_key] = int(float(str(val).replace(",", "")))
                 return
-            except (TypeError, ValueError):
-                pass
+            except (TypeError, ValueError) as e:
+                log.debug("int_coercion_failed", key=dst_key, value=val, error=str(e))
 
 
 def _hash(data: dict[str, Any]) -> str:

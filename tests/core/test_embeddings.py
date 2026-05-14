@@ -145,7 +145,7 @@ class TestEmbedOpenAI:
         )
         mock_cls = _mock_async_openai_cls()
         mock_cls.return_value.embeddings.create = AsyncMock(
-            side_effect=RuntimeError("rate limit")
+            side_effect=ValueError("rate limit")
         )
 
         with patch.object(embeddings, "AsyncOpenAI", mock_cls):

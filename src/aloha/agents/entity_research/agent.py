@@ -635,8 +635,12 @@ class EntityResearchAgent(BaseAgent):
         if formation_raw:
             try:
                 formation_date = date.fromisoformat(str(formation_raw)[:10])
-            except ValueError:
-                pass
+            except ValueError as e:
+                log.debug(
+                    "formation_date_parse_failed",
+                    raw=formation_raw,
+                    error=str(e),
+                )
 
         async with async_session_factory() as session:
             entity_repo = EntityRepository(session)

@@ -249,7 +249,7 @@ class TestEmbedText:
         from aloha.core.embeddings import embed_text
 
         mock_client = AsyncMock()
-        mock_client.embeddings.create = AsyncMock(side_effect=RuntimeError("API down"))
+        mock_client.embeddings.create = AsyncMock(side_effect=ValueError("API down"))
 
         with patch("aloha.core.embeddings.settings") as mock_settings:
             mock_settings.embedding_provider = "openai"
@@ -266,7 +266,7 @@ class TestEmbedText:
         from aloha.core.embeddings import embed_text
 
         mock_client = AsyncMock()
-        mock_client.embeddings.create = AsyncMock(side_effect=RuntimeError("connection refused"))
+        mock_client.embeddings.create = AsyncMock(side_effect=ConnectionError("connection refused"))
 
         with patch("aloha.core.embeddings.settings") as mock_settings:
             mock_settings.embedding_provider = "ollama"

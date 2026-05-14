@@ -19,9 +19,10 @@ log = structlog.get_logger().bind(component="embeddings")
 
 # Optional import — module starts without openai installed (e.g. CI).
 try:
-    from openai import AsyncOpenAI
+    from openai import AsyncOpenAI, OpenAIError
 except ImportError:  # pragma: no cover
     AsyncOpenAI = None  # type: ignore[assignment,misc]
+    OpenAIError = Exception  # type: ignore[assignment,misc]
 
 
 async def embed_text(text: str) -> list[float] | None:
@@ -58,7 +59,7 @@ async def _embed_openai(text: str, settings: object) -> list[float] | None:
             dimensions=settings.embedding_dimensions,  # type: ignore[union-attr]
         )
         return resp.data[0].embedding
-    except Exception as exc:
+    except (OpenAIError, ValueError, KeyError, OSError) as exc:
         log.warning("embedding_failed", provider="openai", error=str(exc))
         return None
 
@@ -73,6 +74,6 @@ async def _embed_ollama(text: str, settings: object) -> list[float] | None:
             input=text,
         )
         return resp.data[0].embedding
-    except Exception as exc:
+    except (OpenAIError, ValueError, KeyError, ConnectionError) as exc:
         log.warning("embedding_failed", provider="ollama", error=str(exc))
         return None

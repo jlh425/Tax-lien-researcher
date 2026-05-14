@@ -38,6 +38,15 @@ htmlcov/
 # Frontend build output
 frontend/dist/
 
+# Claude Code — session artifacts
+.claude/worktrees/
+
+# uv lockfile (regenerated from pyproject.toml)
+uv.lock
+
+# Local Obsidian notes vault
+Aloha/
+
 # Claude Memory Compiler — runtime state & user-specific data
 claude-memory-compiler/daily/
 claude-memory-compiler/knowledge/

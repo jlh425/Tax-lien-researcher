@@ -72,8 +72,8 @@ class StealthHelper:
         if ua_gen is not None:
             try:
                 return ua_gen.chrome  # type: ignore[no-any-return]
-            except Exception:
-                pass
+            except Exception as e:
+                log.debug("ua_generator_failed", error=str(e))
         return random.choice(_FALLBACK_UAS)
 
     def random_viewport(self) -> dict[str, int]:

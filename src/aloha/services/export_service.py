@@ -6,7 +6,7 @@ import csv
 import io
 from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+from jinja2 import Environment, FileSystemLoader, TemplateNotFound, select_autoescape
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -101,7 +101,7 @@ class ExportService(BaseService):
         """Render a parcel report HTML page using Jinja2."""
         try:
             template = self._jinja.get_template("parcel_report.html")
-        except Exception:
+        except TemplateNotFound:
             # Fallback to a minimal inline template if file doesn't exist
             return self._minimal_report(data)
         return template.render(**data)

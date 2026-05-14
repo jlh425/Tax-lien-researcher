@@ -56,6 +56,7 @@ async def ensure_collection() -> None:
             )
             log.info("qdrant_collection_created", collection=settings.qdrant_collection)
     except Exception as exc:
+        # Catch-all: graceful degradation so vector-store outage never blocks pipeline
         log.warning("qdrant_ensure_collection_failed", error=str(exc))
 
 
@@ -82,6 +83,7 @@ async def upsert(
             ],
         )
     except Exception as exc:
+        # Catch-all: graceful degradation so vector-store outage never blocks pipeline
         log.warning("qdrant_upsert_failed", chunk_id=chunk_id, error=str(exc))
 
 
@@ -120,6 +122,7 @@ async def search(
             for point in results.points
         ]
     except Exception as exc:
+        # Catch-all: graceful degradation so vector-store outage never blocks pipeline
         log.warning("qdrant_search_failed", error=str(exc))
         return []
 
@@ -137,4 +140,5 @@ async def delete(chunk_ids: list[int]) -> None:
             points_selector=models.PointIdsList(points=chunk_ids),
         )
     except Exception as exc:
+        # Catch-all: graceful degradation so vector-store outage never blocks pipeline
         log.warning("qdrant_delete_failed", chunk_ids=chunk_ids, error=str(exc))

@@ -14,6 +14,10 @@ from cryptography.fernet import Fernet
 
 from aloha.config import settings
 
+# Module-level singleton; safe because the app runs in a single process with an
+# async event loop — no concurrent threads mutate this reference.  The Fernet
+# instance is derived from the immutable SECRET_KEY and is reused for all
+# encrypt/decrypt calls.
 _fernet: Fernet | None = None
 
 

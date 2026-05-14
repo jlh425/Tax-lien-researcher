@@ -232,9 +232,9 @@ class AdaptiveBrowserScraper:
         try:
             await page.fill(plan.search_input_selector, "delinquent", timeout=5_000)
             await self._stealth.human_delay()
-        except Exception:
+        except Exception as e:
             # Try a blank search — some sites list all delinquent by default
-            pass
+            log.debug("search_fill_failed", error=str(e))
 
         try:
             await page.click(plan.submit_selector, timeout=5_000)
@@ -244,8 +244,8 @@ class AdaptiveBrowserScraper:
             try:
                 await page.keyboard.press("Enter")
                 await page.wait_for_load_state("networkidle", timeout=20_000)
-            except Exception:
-                pass
+            except Exception as e:
+                log.warning("search_submit_fallback_failed", error=str(e))
 
     # ── Result extraction ─────────────────────────────────────────────────────
 

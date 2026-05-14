@@ -2,7 +2,7 @@
 
 ## Tier 1 — Blocking (core functionality gaps)
 
-- [x] **OCR for scanned PDFs** — Docling RapidOCR, pure-Python ONNX (commit `2e71e97`, replaces pytesseract)
+- [x] **OCR for scanned PDFs** — Docling RapidOCR, pure-Python ONNX (commit `2e71e97`)
 - [x] **GIS parcel boundary** — ArcGIS Esri rings → GeoJSON Polygon (commit `c37a77a`)
 - [x] **Email/SMS outreach** — SendGrid v3 + Twilio REST via httpx (commit `3664559`)
 - [x] **Stripe billing** — Real Stripe SDK: customers, checkout, webhooks (commit `e0a0729`)
@@ -11,71 +11,37 @@
 
 ## Tier 2 — High value (tests & integration)
 
-- [x] **Service tests** — 51 tests covering all 9 services (billing, notification, outreach, auth, parcel, export, research, base, deps)
-- [x] **API route tests** — 18 tests for auth, scan, and parcels routes (commit `70d4a8f`)
-- [x] **Frontend component tests** — 42 total: Dashboard, ScanForm, ParcelCard, QueueStatusBar (commit `3ad5353`)
-- [x] **CI/CD** — GitHub Actions: backend (ruff + mypy + pytest) + frontend (tsc + vitest + build) (commit `a46bf2d`)
-- [x] **End-to-end MCP server integration tests** — 7 tests for CourtListener, Cobalt, Google Maps (commit `1006721`)
+- [x] **Service tests** — 51 tests covering all 9 services
+- [x] **API route tests** — 18 tests for auth, scan, and parcels routes
+- [x] **Frontend component tests** — 42 total: Dashboard, ScanForm, ParcelCard, QueueStatusBar
+- [x] **CI/CD** — GitHub Actions: backend (ruff + mypy + pytest) + frontend (tsc + vitest + build)
+- [x] **End-to-end MCP server integration tests** — 7 tests for CourtListener, Cobalt, Google Maps
 
 ## Tier 3 — Polish
 
-- [x] **Docker health checks & resource limits** — postgres/redis/backend/frontend health checks + memory/CPU limits (commit `37d15f6`)
-- [x] **Missing frontend pages** — Settings (profile, subscription, API keys) + Queue History (status cards, agent breakdown) (commit `e5a5975`)
-- [x] **`.env.example` completeness** — Added all missing keys: Stripe, SendGrid, Cobalt, Maps, Captcha (commit `3ee64a4`)
-- [x] **Login/auth UI** — Login/register page, Zustand auth store, route protection, Sign Out (commit `44cc956`)
-
----
+- [x] **Docker health checks & resource limits** — health checks + memory/CPU limits
+- [x] **Missing frontend pages** — Settings + Queue History
+- [x] **`.env.example` completeness** — All missing keys added
+- [x] **Login/auth UI** — Login/register, Zustand auth store, route protection
 
 ## Tier 4 — Business Intelligence (Entity Research expansion)
 
-- [x] **4.1 — Wire UCC MCP server** — search_ucc_filings integrated into Entity Research Agent (commit `8ce9880`)
-- [x] **4.2 — Wire Court Records MCP server** — federal cases, state liens, bankruptcy filtered into Entity fields (commit `8ce9880`)
-- [x] **4.3 — Scoring Agent financial health signals** — `_apply_financial_health()` boosts motivation from UCC/liens/bankruptcy (commit `948fb9e`)
-- [x] **4.4 — Business Contact Enrichment** — People Data Labs + Hunter.io email verification (commit `948fb9e`)
+- [x] **4.1 — Wire UCC MCP server** — search_ucc_filings integrated into Entity Research Agent
+- [x] **4.2 — Wire Court Records MCP server** — federal cases, state liens, bankruptcy
+- [x] **4.3 — Scoring Agent financial health signals** — UCC/liens/bankruptcy boost motivation
+- [x] **4.4 — Business Contact Enrichment** — People Data Labs + Hunter.io email verification
 
----
+## Tier 5 — Code Quality & Hardening
 
-### 4.3 — Scoring Agent: incorporate financial health signals
-
-**Goal**: The Scoring Agent should factor UCC filings, liens, and litigation into the
-investment opportunity score. An entity with heavy debt, active tax liens, or
-bankruptcy is a different risk profile.
-
-**Files to change**:
-- `src/aloha/agents/scoring/agent.py` — read Entity financial fields when computing score
-- `src/aloha/agents/scoring/prompts.py` — add scoring rubric for financial health signals:
-  - Active UCC filings → higher likelihood of motivated seller
-  - Federal/state tax liens → very high priority lead
-  - Bankruptcy → potential complication (title issues) but also motivated seller
-  - Active litigation → risk factor for title insurance
-
-**Tests**: `tests/agents/test_scoring.py` — test score adjustments for entities with/without financial data
-
----
-
-### 4.4 — Business Contact Enrichment (future)
-
-**Goal**: Populate `Entity.website`, `Entity.phone`, `Entity.email` for outreach
-to business entities (currently only individual owners get contact enrichment).
-
-**Approach options** (pick one when implementing):
-- **A. Web scrape SOS filing** — many states include website/phone in annual reports
-- **B. People Data Labs / Hunter.io** — existing MCP server may have business data
-- **C. New provider** — ZoomInfo, Clearbit, or D&B API for business contact data
-- **D. LLM web search** — SearXNG + LLM to find business contact pages
-
-**Files to change**:
-- `src/aloha/agents/entity_research/agent.py` — add `_enrich_contact()` step
-- Possibly a new MCP server or extend existing People Data Labs server
-
----
-
-### Implementation order
-
-```
-4.1 (UCC filings)  ✅  →  4.3 (scoring)  →  4.4 (contacts)
-4.2 (litigation)   ✅       ~1-2 hours         ~TBD
-```
-
-4.1 and 4.2 are done. 4.3 depends on both (now unblocked).
-4.4 is a separate initiative requiring API evaluation.
+- [x] **CORS configuration** — Replaced permissive wildcard CORS with configurable `CORS_ALLOWED_ORIGINS`
+- [x] **Secret key validation** — Production validator rejects default `SECRET_KEY`
+- [x] **Exception handling audit** — Replaced 8+ silent `except: pass` blocks with structured logging
+- [x] **Narrowed exception handlers** — Bare `except Exception` replaced with specific types in core modules
+- [x] **Report agent error handling** — Added proper logging for template and PDF generation failures
+- [x] **Circuit breaker for scrapers** — `CircuitBreaker` class with configurable thresholds in `BaseScraper`
+- [x] **UCC input validation** — Added Pydantic field constraints to UCC API schemas
+- [x] **Missing `__init__.py` files** — Added to migrations, versions, and report templates directories
+- [x] **README** — Replaced empty README with proper project documentation
+- [x] **`.gitignore` cleanup** — Added `uv.lock`, `.claude/worktrees/`, `Aloha/`
+- [x] **`.env.example` updates** — Added `CORS_ALLOWED_ORIGINS` and `SEARXNG_URL`
+- [x] **Expanded test coverage** — 1300+ backend tests, 160+ frontend tests across all layers

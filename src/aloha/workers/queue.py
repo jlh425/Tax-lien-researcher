@@ -91,6 +91,8 @@ async def process_one(session: AsyncSession) -> bool:
         await session.commit()
         log.info("item_complete", item_id=item_id)
     except Exception as exc:
+        # Catch-all: agent processing can fail in arbitrary ways; record
+        # the failure in the DB so the item is not retried endlessly.
         await session.rollback()
         async with async_session_factory() as err_session:
             await err_session.execute(
@@ -98,7 +100,7 @@ async def process_one(session: AsyncSession) -> bool:
                 {"item_id": item_id, "status": "failed", "result": str(exc)},
             )
             await err_session.commit()
-        log.error("item_failed", item_id=item_id, error=str(exc))
+        log.error("item_failed", item_id=item_id, error=str(exc), exc_info=True)
 
     return True
 
@@ -121,5 +123,6 @@ async def run_loop(*, poll_interval: float = 2.0) -> None:
             log.info("queue_runner_stopped")
             break
         except Exception as exc:
-            log.error("queue_runner_error", error=str(exc))
+            # Catch-all: top-level error boundary for the queue runner loop
+            log.error("queue_runner_error", error=str(exc), exc_info=True)
             await asyncio.sleep(poll_interval)

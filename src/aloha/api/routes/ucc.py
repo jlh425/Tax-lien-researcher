@@ -14,6 +14,8 @@ router = APIRouter(prefix="/ucc", tags=["ucc"])
 
 # ── Dependency ────────────────────────────────────────────────────────────────
 
+# Module-level singleton; safe because FastAPI runs in a single process with an
+# async event loop — no concurrent threads mutate this reference.
 _server: UCCMCPServer | None = None
 
 

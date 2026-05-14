@@ -124,8 +124,8 @@ class QPublicScraper:
                 try:
                     await page.keyboard.press("Enter")
                     await page.wait_for_load_state("networkidle", timeout=15_000)
-                except Exception:
-                    pass
+                except Exception as e:
+                    log.warning("qpublic_submit_failed", apn=apn, error=str(e))
 
                 # Parse detail page
                 raw = await _parse_qpublic_html(page)

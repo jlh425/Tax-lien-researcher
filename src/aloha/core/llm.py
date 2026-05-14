@@ -310,5 +310,12 @@ async def resolve_user_model(
             return _build_model_with_key(preferred_provider, model_name, api_key)
 
     except Exception:
-        log.warning("user_model_resolution_failed", user_id=user_id, agent=agent_name)
+        # Catch-all: DB/crypto/config errors should not crash the agent;
+        # fall back to server-level model instead.
+        log.warning(
+            "user_model_resolution_failed",
+            user_id=user_id,
+            agent=agent_name,
+            exc_info=True,
+        )
         return None

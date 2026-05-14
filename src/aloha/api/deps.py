@@ -25,6 +25,7 @@ async def get_db() -> AsyncIterator[AsyncSession]:
             yield session
             await session.commit()
         except Exception:
+            # Catch-all: rollback on any error to keep the session clean
             await session.rollback()
             raise
 

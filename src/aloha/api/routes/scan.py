@@ -76,6 +76,7 @@ async def _run_discovery(
     try:
         await discovery_agent.run(context)
     except Exception:
+        # Catch-all: top-level error boundary for background discovery task
         import structlog
         log = structlog.get_logger()
         log.exception("discovery_background_failed", state=state, county=county)
