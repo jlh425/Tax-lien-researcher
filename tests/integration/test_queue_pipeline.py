@@ -550,7 +550,7 @@ class TestStallReaper:
                 pass
 
         queue_repo.reset_stalled.assert_called()
-        assert queue_repo.reset_stalled.call_args.kwargs["stall_minutes"] == 30
+        assert queue_repo.reset_stalled.call_args.kwargs["stalled_after_minutes"] == 30
         session.commit.assert_called()
 
     async def test_stall_reaper_handles_exceptions_gracefully(

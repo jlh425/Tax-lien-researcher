@@ -147,7 +147,7 @@ class OrchestratorAgent(BaseAgent):
             try:
                 async with async_session_factory() as session:
                     queue_repo = QueueRepository(session)
-                    reset = await queue_repo.reset_stalled(stall_minutes=30)
+                    reset = await queue_repo.reset_stalled(stalled_after_minutes=30)
                     await session.commit()
                 if reset:
                     self.log.info("stalled_items_reset", count=reset)
