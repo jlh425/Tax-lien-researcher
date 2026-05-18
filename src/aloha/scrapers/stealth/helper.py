@@ -104,14 +104,12 @@ class StealthHelper:
         )
 
         # Apply playwright-stealth JS evasions if available (optional dependency)
-        try:
-            from playwright_stealth import stealth_async  # type: ignore[import]
+        import importlib.util
 
-            # stealth_async works on pages, not contexts; apply per-page via route
-            # Store flag so new_page callers can apply it
-            context._stealth_enabled = True  # type: ignore[attr-defined]
-        except ImportError:
-            context._stealth_enabled = False  # type: ignore[attr-defined]
+        _has_stealth = importlib.util.find_spec("playwright_stealth") is not None
+        # stealth_async works on pages, not contexts; apply per-page via route
+        # Store flag so new_page callers can apply it
+        context._stealth_enabled = _has_stealth  # type: ignore[attr-defined]
 
         return context
 

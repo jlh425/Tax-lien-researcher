@@ -56,7 +56,9 @@ class ExportService(BaseService):
         html = self._render_html_report(
             {
                 "parcel": parcel,
-                "liens": sorted(parcel.tax_liens, key=lambda l: l.tax_year or 0, reverse=True),
+                "liens": sorted(
+                    parcel.tax_liens, key=lambda lien: lien.tax_year or 0, reverse=True
+                ),
                 "owners": parcel.owners,
                 "scores": sorted(parcel.scores, key=lambda s: s.scored_at, reverse=True),
                 "images": parcel.property_images,
